@@ -110,6 +110,15 @@
       min-width: 180px;
     }
 
+    .graph-toolbar input[type='text'] {
+      min-width: 120px;
+      padding: 6px 8px;
+      border-radius: 8px;
+      border: 1px solid #1f2d54;
+      background: #0f1830;
+      color: var(--text);
+    }
+
     .graph-canvas-wrapper {
       position: relative;
       border: 1px dashed #23305a;
@@ -142,6 +151,29 @@
       stroke: #45c0ff;
     }
 
+    .graph-node.terminal .terminal-shape {
+      fill: rgba(93, 214, 255, 0.08);
+      stroke: var(--accent);
+      stroke-width: 2;
+    }
+
+    .graph-node.terminal-end .terminal-shape {
+      stroke: var(--accent2);
+      fill: rgba(158, 255, 161, 0.08);
+    }
+
+    .graph-node.terminal .terminal-role {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      fill: var(--accent);
+    }
+
+    .graph-node.terminal-end .terminal-role {
+      fill: var(--accent2);
+    }
+
     .graph-node text {
       fill: var(--text);
       font-size: 12px;
@@ -155,8 +187,21 @@
       stroke-width: 3;
     }
 
+    .graph-node.pending .terminal-shape {
+      stroke: var(--accent2);
+      stroke-width: 3;
+    }
+
     .graph-node:hover circle {
       stroke: var(--accent);
+    }
+
+    .graph-node.terminal:hover .terminal-shape {
+      stroke: var(--accent);
+    }
+
+    .graph-node.terminal-end:hover .terminal-shape {
+      stroke: var(--accent2);
     }
 
     .graph-meta {
@@ -501,20 +546,25 @@
             <select id="graphComponentSelect">
               <option value="">Select component…</option>
             </select>
+            <input id="graphStartLabel" type="text" placeholder="Start label" style="width:120px" />
+            <button id="graphAddStart" class="ghost">Place Start</button>
             <button id="graphAddNode" class="ghost">Add Node</button>
             <button id="graphAddEdge" class="ghost">Add Edge</button>
             <button id="graphAddMerge" class="ghost">Add Merge Dot</button>
+            <input id="graphEndLabel" type="text" placeholder="End label" style="width:120px" />
+            <button id="graphAddEnd" class="ghost">Place End</button>
             <button id="graphCancel" class="ghost">Cancel</button>
           </div>
         </div>
         <div class="hint">
-          Use the availability graph to express stage and redundancy relationships visually. Node positions are draggable; edges
-          determine ordering, and merge dots behave as always-on connectors.
+          Use the availability graph to express stage and redundancy relationships visually. Begin by placing start and end
+          terminals, then wire components or merge dots between them. Node positions are draggable; edges determine ordering, and
+          merge dots behave as always-on connectors.
         </div>
         <div class="graph-canvas-wrapper">
           <svg id="graphCanvas" viewBox="0 0 800 400" preserveAspectRatio="xMidYMid meet"></svg>
         </div>
-        <div id="graphEmpty" class="empty-hint">Add nodes to visualize the topology.</div>
+        <div id="graphEmpty" class="empty-hint">Place start/end terminals and nodes to visualize the topology.</div>
         <div class="graph-meta">
           <div>
             <h3>Nodes</h3>
@@ -604,13 +654,17 @@ Expected downtime (hours) = (1 − A) × window_hours
 
     const graphCanvas = document.getElementById('graphCanvas');
     const graphComponentSelect = document.getElementById('graphComponentSelect');
+    const graphAddStartBtn = document.getElementById('graphAddStart');
     const graphAddNodeBtn = document.getElementById('graphAddNode');
     const graphAddEdgeBtn = document.getElementById('graphAddEdge');
     const graphAddMergeBtn = document.getElementById('graphAddMerge');
+    const graphAddEndBtn = document.getElementById('graphAddEnd');
     const graphCancelBtn = document.getElementById('graphCancel');
     const graphEmptyEl = document.getElementById('graphEmpty');
     const graphNodeListEl = document.getElementById('graphNodeList');
     const graphEdgeListEl = document.getElementById('graphEdgeList');
+    const graphStartLabelInput = document.getElementById('graphStartLabel');
+    const graphEndLabelInput = document.getElementById('graphEndLabel');
 
     const components = [];
     const stages = [];
@@ -674,9 +728,11 @@ Expected downtime (hours) = (1 − A) × window_hours
 
     function refreshGraphModeButtons() {
       const buttons = [
+        { btn: graphAddStartBtn, mode: 'add-start-terminal' },
         { btn: graphAddNodeBtn, mode: 'add-node' },
         { btn: graphAddEdgeBtn, mode: 'add-edge' },
         { btn: graphAddMergeBtn, mode: 'add-merge' },
+        { btn: graphAddEndBtn, mode: 'add-end-terminal' },
       ];
       buttons.forEach(({ btn, mode }) => {
         if (!btn) return;
@@ -702,15 +758,46 @@ Expected downtime (hours) = (1 − A) × window_hours
     }
 
     function getGraphNodeLabel(node) {
+      if (node.type === 'terminal') {
+        const role = node.role === 'start' ? 'Start' : 'End';
+        return node.label ? `${role}: ${node.label}` : `${role} Terminal`;
+      }
       if (node.type === 'merge') return node.label;
       const comp = getComponentById(node.componentId);
       return comp ? comp.name : 'Unknown';
     }
 
     function getGraphNodeAvailability(node) {
+      if (node.type === 'terminal') return 1;
       if (node.type === 'merge') return 1;
       const comp = getComponentById(node.componentId);
       return comp ? comp.availability : null;
+    }
+
+    function getTerminalNode(role) {
+      return graphNodes.find((node) => node.type === 'terminal' && node.role === role) || null;
+    }
+
+    function upsertTerminalNode(role, label, x, y) {
+      const existing = getTerminalNode(role);
+      const sanitizedLabel = label.trim();
+      if (existing) {
+        existing.label = sanitizedLabel;
+        existing.x = x;
+        existing.y = y;
+        return existing;
+      }
+      const node = {
+        id: nextGraphNodeId++,
+        type: 'terminal',
+        role,
+        label: sanitizedLabel,
+        availability: 1,
+        x,
+        y,
+      };
+      graphNodes.push(node);
+      return node;
     }
 
     function refreshGraphComponentSelect() {
@@ -766,7 +853,7 @@ Expected downtime (hours) = (1 − A) × window_hours
     function removeGraphNodeInternal(id) {
       const idx = graphNodes.findIndex((n) => n.id === id);
       if (idx === -1) return;
-      graphNodes.splice(idx, 1);
+      const [removed] = graphNodes.splice(idx, 1);
       for (let i = graphEdges.length - 1; i >= 0; i -= 1) {
         if (graphEdges[i].from === id || graphEdges[i].to === id) {
           graphEdges.splice(i, 1);
@@ -774,6 +861,14 @@ Expected downtime (hours) = (1 − A) × window_hours
       }
       if (pendingEdgeStartId === id) {
         pendingEdgeStartId = null;
+      }
+      if (removed && removed.type === 'terminal') {
+        if (removed.role === 'start' && graphStartLabelInput) {
+          graphStartLabelInput.value = '';
+        }
+        if (removed.role === 'end' && graphEndLabelInput) {
+          graphEndLabelInput.value = '';
+        }
       }
     }
 
@@ -795,6 +890,32 @@ Expected downtime (hours) = (1 − A) × window_hours
       if (evt.target !== graphCanvas) return;
       if (!graphMode) return;
       const coords = getSVGCoordinates(evt);
+      if (graphMode === 'add-start-terminal') {
+        if (!graphStartLabelInput) return;
+        const label = graphStartLabelInput.value.trim();
+        if (!label) {
+          alert('Provide a label for the start terminal before placing it.');
+          return;
+        }
+        upsertTerminalNode('start', label, coords.x, coords.y);
+        setGraphMode(null);
+        refreshGraph();
+        computeSystem();
+        return;
+      }
+      if (graphMode === 'add-end-terminal') {
+        if (!graphEndLabelInput) return;
+        const label = graphEndLabelInput.value.trim();
+        if (!label) {
+          alert('Provide a label for the end terminal before placing it.');
+          return;
+        }
+        upsertTerminalNode('end', label, coords.x, coords.y);
+        setGraphMode(null);
+        refreshGraph();
+        computeSystem();
+        return;
+      }
       if (graphMode === 'add-node') {
         const selected = graphComponentSelect.value;
         if (!selected) {
@@ -875,6 +996,24 @@ Expected downtime (hours) = (1 − A) × window_hours
       computeSystem();
     }
 
+    function getTerminalCloudPath(cx, cy) {
+      const width = 80;
+      const height = 46;
+      const left = cx - width / 2;
+      const right = cx + width / 2;
+      const top = cy - height / 2;
+      const bottom = cy + height / 2;
+      const control = 14;
+      return [
+        `M ${left} ${cy}`,
+        `C ${left - control} ${top}, ${cx - width / 3} ${top - control}, ${cx} ${top}`,
+        `C ${cx + width / 3} ${top - control}, ${right + control} ${top}, ${right} ${cy}`,
+        `C ${right + control} ${bottom}, ${cx + width / 3} ${bottom + control}, ${cx} ${bottom}`,
+        `C ${cx - width / 3} ${bottom + control}, ${left - control} ${bottom}, ${left} ${cy}`,
+        'Z',
+      ].join(' ');
+    }
+
     function renderGraph() {
       if (!graphCanvas) return;
       graphCanvas.innerHTML = '';
@@ -909,26 +1048,43 @@ Expected downtime (hours) = (1 − A) × window_hours
 
       graphNodes.forEach((node) => {
         const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-        group.setAttribute('class', `graph-node${node.type === 'merge' ? ' merge' : ''}${
-          pendingEdgeStartId === node.id ? ' pending' : ''
-        }`);
+        const classNames = ['graph-node'];
+        if (node.type === 'merge') classNames.push('merge');
+        if (node.type === 'terminal') classNames.push('terminal', `terminal-${node.role}`);
+        if (pendingEdgeStartId === node.id) classNames.push('pending');
+        group.setAttribute('class', classNames.join(' '));
         group.dataset.id = node.id;
-        const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-        const radius = node.type === 'merge' ? 10 : 16;
-        circle.setAttribute('cx', node.x);
-        circle.setAttribute('cy', node.y);
-        circle.setAttribute('r', radius);
-        group.appendChild(circle);
+        if (node.type === 'terminal') {
+          const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+          path.setAttribute('d', getTerminalCloudPath(node.x, node.y));
+          path.setAttribute('class', 'terminal-shape');
+          group.appendChild(path);
+          const roleText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+          roleText.setAttribute('x', node.x);
+          roleText.setAttribute('y', node.y + 4);
+          roleText.setAttribute('class', 'terminal-role');
+          roleText.textContent = node.role === 'start' ? 'START' : 'END';
+          group.appendChild(roleText);
+        } else {
+          const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+          const radius = node.type === 'merge' ? 10 : 16;
+          circle.setAttribute('cx', node.x);
+          circle.setAttribute('cy', node.y);
+          circle.setAttribute('r', radius);
+          group.appendChild(circle);
+        }
 
         const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
         text.setAttribute('x', node.x);
-        text.setAttribute('y', node.y - (node.type === 'merge' ? 18 : 22));
+        const labelOffset = node.type === 'merge' ? 18 : node.type === 'terminal' ? 36 : 22;
+        text.setAttribute('y', node.y - labelOffset);
         text.textContent = getGraphNodeLabel(node);
         group.appendChild(text);
 
         const availabilityText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
         availabilityText.setAttribute('x', node.x);
-        availabilityText.setAttribute('y', node.y + (node.type === 'merge' ? 20 : 24));
+        const availabilityOffset = node.type === 'merge' ? 20 : node.type === 'terminal' ? 40 : 24;
+        availabilityText.setAttribute('y', node.y + availabilityOffset);
         const availability = getGraphNodeAvailability(node);
         availabilityText.textContent = Number.isFinite(availability)
           ? formatPct(availability)
@@ -963,7 +1119,15 @@ Expected downtime (hours) = (1 − A) × window_hours
           const row = document.createElement('div');
           row.className = 'item';
           const span = document.createElement('span');
-          span.textContent = `${getGraphNodeLabel(node)}${node.type === 'merge' ? '' : ' ↔ component'}`;
+          if (node.type === 'terminal') {
+            const role = node.role === 'start' ? 'Start Terminal' : 'End Terminal';
+            const label = node.label ? node.label : 'Unlabeled';
+            span.textContent = `${role} — ${label}`;
+          } else if (node.type === 'merge') {
+            span.textContent = getGraphNodeLabel(node);
+          } else {
+            span.textContent = `${getGraphNodeLabel(node)} ↔ component`;
+          }
           const delBtn = document.createElement('button');
           delBtn.className = 'danger';
           delBtn.textContent = 'Delete';
@@ -973,6 +1137,27 @@ Expected downtime (hours) = (1 − A) × window_hours
             }
           });
           row.appendChild(span);
+          if (node.type === 'terminal') {
+            const moveBtn = document.createElement('button');
+            moveBtn.className = 'ghost';
+            moveBtn.textContent = 'Move';
+            moveBtn.addEventListener('click', () => {
+              if (node.role === 'start') {
+                if (graphStartLabelInput) {
+                  graphStartLabelInput.value = node.label;
+                  graphStartLabelInput.focus();
+                }
+                setGraphMode('add-start-terminal');
+              } else {
+                if (graphEndLabelInput) {
+                  graphEndLabelInput.value = node.label;
+                  graphEndLabelInput.focus();
+                }
+                setGraphMode('add-end-terminal');
+              }
+            });
+            row.appendChild(moveBtn);
+          }
           row.appendChild(delBtn);
           graphNodeListEl.appendChild(row);
         });
@@ -1022,50 +1207,125 @@ Expected downtime (hours) = (1 − A) × window_hours
       if (!graphNodes.length) {
         return [];
       }
+      const startNode = getTerminalNode('start');
+      const endNode = getTerminalNode('end');
+      if (!startNode || !endNode) {
+        return [];
+      }
 
-      const indegree = new Map();
-      const adjacency = new Map();
+      const nodeById = new Map();
       graphNodes.forEach((node) => {
-        indegree.set(node.id, 0);
-        adjacency.set(node.id, []);
+        nodeById.set(node.id, node);
       });
+
+      const adjacency = new Map();
+      const reverseAdjacency = new Map();
+      nodeById.forEach((_, id) => {
+        adjacency.set(id, []);
+        reverseAdjacency.set(id, []);
+      });
+
       graphEdges.forEach((edge) => {
-        if (!indegree.has(edge.to) || !adjacency.has(edge.from)) return;
-        indegree.set(edge.to, (indegree.get(edge.to) || 0) + 1);
+        if (!adjacency.has(edge.from) || !reverseAdjacency.has(edge.to)) return;
         adjacency.get(edge.from).push(edge.to);
+        reverseAdjacency.get(edge.to).push(edge.from);
       });
 
-      const queue = [];
-      indegree.forEach((value, key) => {
-        if (value === 0) {
-          queue.push(key);
-        }
-      });
-
-      const depth = new Map();
-      queue.forEach((id) => depth.set(id, 0));
-
-      for (let i = 0; i < queue.length; i += 1) {
-        const current = queue[i];
-        const currentDepth = depth.get(current) || 0;
+      const forwardReachable = new Set([startNode.id]);
+      const forwardQueue = [startNode.id];
+      for (let i = 0; i < forwardQueue.length; i += 1) {
+        const current = forwardQueue[i];
         const neighbors = adjacency.get(current) || [];
         neighbors.forEach((next) => {
-          const nextDepth = Math.max(depth.get(next) || 0, currentDepth + 1);
-          depth.set(next, nextDepth);
-          indegree.set(next, (indegree.get(next) || 1) - 1);
-          if (indegree.get(next) === 0) {
-            queue.push(next);
+          if (!forwardReachable.has(next)) {
+            forwardReachable.add(next);
+            forwardQueue.push(next);
           }
         });
       }
 
+      const backwardReachable = new Set([endNode.id]);
+      const backwardQueue = [endNode.id];
+      for (let i = 0; i < backwardQueue.length; i += 1) {
+        const current = backwardQueue[i];
+        const neighbors = reverseAdjacency.get(current) || [];
+        neighbors.forEach((next) => {
+          if (!backwardReachable.has(next)) {
+            backwardReachable.add(next);
+            backwardQueue.push(next);
+          }
+        });
+      }
+
+      const relevantIds = new Set();
+      forwardReachable.forEach((id) => {
+        if (backwardReachable.has(id)) {
+          relevantIds.add(id);
+        }
+      });
+
+      if (!relevantIds.has(startNode.id) || !relevantIds.has(endNode.id)) {
+        return [];
+      }
+
+      const indegree = new Map();
+      relevantIds.forEach((id) => {
+        indegree.set(id, 0);
+      });
+
+      graphEdges.forEach((edge) => {
+        if (relevantIds.has(edge.from) && relevantIds.has(edge.to)) {
+          indegree.set(edge.to, (indegree.get(edge.to) || 0) + 1);
+        }
+      });
+
+      const topoQueue = [];
+      indegree.forEach((value, id) => {
+        if (value === 0) {
+          topoQueue.push(id);
+        }
+      });
+
+      topoQueue.sort((a, b) => {
+        if (a === startNode.id) return -1;
+        if (b === startNode.id) return 1;
+        return 0;
+      });
+
+      const indegreeCopy = new Map(indegree);
+      const depth = new Map();
+      depth.set(startNode.id, 0);
+
+      for (let i = 0; i < topoQueue.length; i += 1) {
+        const current = topoQueue[i];
+        const currentDepth = depth.get(current) ?? 0;
+        const neighbors = adjacency.get(current) || [];
+        neighbors.forEach((next) => {
+          if (!relevantIds.has(next)) return;
+          const nextDepth = Math.max(depth.get(next) ?? 0, currentDepth + 1);
+          depth.set(next, nextDepth);
+          indegreeCopy.set(next, (indegreeCopy.get(next) || 0) - 1);
+          if (indegreeCopy.get(next) === 0) {
+            topoQueue.push(next);
+          }
+        });
+      }
+
+      if (!depth.has(endNode.id)) {
+        return [];
+      }
+
       const byDepth = new Map();
-      graphNodes.forEach((node) => {
-        const layer = depth.get(node.id) ?? 0;
+      relevantIds.forEach((id) => {
+        if (!depth.has(id)) return;
+        const layer = depth.get(id) ?? 0;
         if (!byDepth.has(layer)) {
           byDepth.set(layer, []);
         }
-        byDepth.get(layer).push(node);
+        const node = nodeById.get(id);
+        if (node) {
+          byDepth.get(layer).push(node);
+        }
       });
 
       const orderedDepths = Array.from(byDepth.keys()).sort((a, b) => a - b);
@@ -1496,7 +1756,7 @@ Expected downtime (hours) = (1 − A) × window_hours
         systemUnavailabilityEl.textContent = '—';
         systemDowntimeEl.textContent = '—';
         systemDowntimeDetailEl.textContent = usingGraph
-          ? 'Add edges or components to the graph to define computation stages.'
+          ? 'Add terminals, edges, or components to the graph to define computation stages.'
           : 'Add stages to compute results.';
         systemStatusEl.textContent = 'Waiting for topology…';
         systemStatusEl.className = 'value';
@@ -1553,6 +1813,12 @@ Expected downtime (hours) = (1 − A) × window_hours
       mergeDotCount = 1;
       pendingEdgeStartId = null;
       derivedGraphStages = [];
+      if (graphStartLabelInput) {
+        graphStartLabelInput.value = '';
+      }
+      if (graphEndLabelInput) {
+        graphEndLabelInput.value = '';
+      }
       setGraphMode(null);
       resetForm();
       refreshComponents();
@@ -1562,6 +1828,17 @@ Expected downtime (hours) = (1 − A) × window_hours
     }
 
     function seedData() {
+      const defaultStartLabel = 'Service Entry';
+      const defaultEndLabel = 'Service Exit';
+      const startLabel = graphStartLabelInput ? graphStartLabelInput.value.trim() || defaultStartLabel : defaultStartLabel;
+      const endLabel = graphEndLabelInput ? graphEndLabelInput.value.trim() || defaultEndLabel : defaultEndLabel;
+      if (graphStartLabelInput) {
+        graphStartLabelInput.value = startLabel;
+      }
+      if (graphEndLabelInput) {
+        graphEndLabelInput.value = endLabel;
+      }
+
       components.push(
         { id: nextComponentId++, name: 'Edge Router A', mtbf: 1400, mttr: 2, availability: computeAvailability(1400, 2) },
         { id: nextComponentId++, name: 'Edge Router B', mtbf: 1400, mttr: 2, availability: computeAvailability(1400, 2) },
@@ -1575,12 +1852,20 @@ Expected downtime (hours) = (1 − A) × window_hours
         { id: nextStageId++, name: 'Security Tier', type: 'series', componentIds: [4] },
       );
 
+      const startTerminal = upsertTerminalNode('start', startLabel, 80, 200);
       const entryMerge = addMergeDotNode(320, 220);
       const routerA = addGraphNodeFromComponent(1, 160, 160);
       const routerB = addGraphNodeFromComponent(2, 160, 280);
       const core = addGraphNodeFromComponent(3, 480, 200);
       const firewall = addGraphNodeFromComponent(4, 640, 200);
+      const endTerminal = upsertTerminalNode('end', endLabel, 760, 200);
 
+      if (startTerminal && routerA) {
+        graphEdges.push({ id: nextGraphEdgeId++, from: startTerminal.id, to: routerA.id });
+      }
+      if (startTerminal && routerB) {
+        graphEdges.push({ id: nextGraphEdgeId++, from: startTerminal.id, to: routerB.id });
+      }
       if (routerA && entryMerge) {
         graphEdges.push({ id: nextGraphEdgeId++, from: routerA.id, to: entryMerge.id });
       }
@@ -1593,6 +1878,9 @@ Expected downtime (hours) = (1 − A) × window_hours
       if (core && firewall) {
         graphEdges.push({ id: nextGraphEdgeId++, from: core.id, to: firewall.id });
       }
+      if (firewall && endTerminal) {
+        graphEdges.push({ id: nextGraphEdgeId++, from: firewall.id, to: endTerminal.id });
+      }
     }
 
     saveComponentBtn.addEventListener('click', upsertComponent);
@@ -1604,6 +1892,15 @@ Expected downtime (hours) = (1 − A) × window_hours
       refreshComponents();
       refreshStages();
     });
+    if (graphAddStartBtn) {
+      graphAddStartBtn.addEventListener('click', () => {
+        const existing = getTerminalNode('start');
+        if (existing && graphStartLabelInput && !graphStartLabelInput.value.trim()) {
+          graphStartLabelInput.value = existing.label;
+        }
+        setGraphMode(graphMode === 'add-start-terminal' ? null : 'add-start-terminal');
+      });
+    }
     if (graphAddNodeBtn) {
       graphAddNodeBtn.addEventListener('click', () => {
         if (!components.length) {
@@ -1625,6 +1922,15 @@ Expected downtime (hours) = (1 − A) × window_hours
     if (graphAddMergeBtn) {
       graphAddMergeBtn.addEventListener('click', () => {
         setGraphMode(graphMode === 'add-merge' ? null : 'add-merge');
+      });
+    }
+    if (graphAddEndBtn) {
+      graphAddEndBtn.addEventListener('click', () => {
+        const existing = getTerminalNode('end');
+        if (existing && graphEndLabelInput && !graphEndLabelInput.value.trim()) {
+          graphEndLabelInput.value = existing.label;
+        }
+        setGraphMode(graphMode === 'add-end-terminal' ? null : 'add-end-terminal');
       });
     }
     if (graphCancelBtn) {
