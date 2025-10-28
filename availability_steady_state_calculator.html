@@ -1737,12 +1737,24 @@ Expected downtime (hours) = (1 − A) × window_hours
 
     function computeSystem() {
       const windowHours = getWindowHours();
+      const hasGraphTopology = graphNodes.length > 0;
       let usingGraph = false;
       let stageSummaries = [];
 
-      if (graphNodes.length) {
+      if (hasGraphTopology) {
         stageSummaries = computeGraphStages(windowHours);
-        usingGraph = !!stageSummaries.length;
+        usingGraph = stageSummaries.length > 0;
+
+        if (!usingGraph) {
+          systemAvailabilityEl.textContent = '—';
+          systemUnavailabilityEl.textContent = '—';
+          systemDowntimeEl.textContent = '—';
+          systemDowntimeDetailEl.textContent = 'Add connections so the start and end terminals share at least one path.';
+          systemStatusEl.textContent = 'Missing terminal connection';
+          systemStatusEl.className = 'value status-warn';
+          refreshStages();
+          return;
+        }
       } else {
         derivedGraphStages = [];
       }
