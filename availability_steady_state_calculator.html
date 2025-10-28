@@ -157,7 +157,7 @@
       stroke-width: 2;
     }
 
-    .graph-node.terminal-end .terminal-shape {
+    .graph-node.terminal-b .terminal-shape {
       stroke: var(--accent2);
       fill: rgba(158, 255, 161, 0.08);
     }
@@ -170,7 +170,7 @@
       fill: var(--accent);
     }
 
-    .graph-node.terminal-end .terminal-role {
+    .graph-node.terminal-b .terminal-role {
       fill: var(--accent2);
     }
 
@@ -200,7 +200,7 @@
       stroke: var(--accent);
     }
 
-    .graph-node.terminal-end:hover .terminal-shape {
+    .graph-node.terminal-b:hover .terminal-shape {
       stroke: var(--accent2);
     }
 
@@ -546,25 +546,25 @@
             <select id="graphComponentSelect">
               <option value="">Select component…</option>
             </select>
-            <input id="graphStartLabel" type="text" placeholder="Start label" style="width:120px" />
-            <button id="graphAddStart" class="ghost">Place Start</button>
+            <input id="graphTerminalALabel" type="text" placeholder="Terminal A label" style="width:120px" />
+            <button id="graphAddTerminalA" class="ghost">Place Terminal A</button>
             <button id="graphAddNode" class="ghost">Add Node</button>
             <button id="graphAddEdge" class="ghost">Add Edge</button>
             <button id="graphAddMerge" class="ghost">Add Merge Dot</button>
-            <input id="graphEndLabel" type="text" placeholder="End label" style="width:120px" />
-            <button id="graphAddEnd" class="ghost">Place End</button>
+            <input id="graphTerminalBLabel" type="text" placeholder="Terminal B label" style="width:120px" />
+            <button id="graphAddTerminalB" class="ghost">Place Terminal B</button>
             <button id="graphCancel" class="ghost">Cancel</button>
           </div>
         </div>
         <div class="hint">
-          Use the availability graph to express stage and redundancy relationships visually. Begin by placing start and end
-          terminals, then wire components or merge dots between them. Node positions are draggable; edges determine ordering, and
+          Use the availability graph to express stage and redundancy relationships visually. Begin by placing Terminal A and Terminal B
+          nodes, then wire components or merge dots between them. Node positions are draggable; edges determine ordering, and
           merge dots behave as always-on connectors.
         </div>
         <div class="graph-canvas-wrapper">
           <svg id="graphCanvas" viewBox="0 0 800 400" preserveAspectRatio="xMidYMid meet"></svg>
         </div>
-        <div id="graphEmpty" class="empty-hint">Place start/end terminals and nodes to visualize the topology.</div>
+        <div id="graphEmpty" class="empty-hint">Place Terminal A/B nodes and components to visualize the topology.</div>
         <div class="graph-meta">
           <div>
             <h3>Nodes</h3>
@@ -654,17 +654,17 @@ Expected downtime (hours) = (1 − A) × window_hours
 
     const graphCanvas = document.getElementById('graphCanvas');
     const graphComponentSelect = document.getElementById('graphComponentSelect');
-    const graphAddStartBtn = document.getElementById('graphAddStart');
+    const graphAddTerminalABtn = document.getElementById('graphAddTerminalA');
     const graphAddNodeBtn = document.getElementById('graphAddNode');
     const graphAddEdgeBtn = document.getElementById('graphAddEdge');
     const graphAddMergeBtn = document.getElementById('graphAddMerge');
-    const graphAddEndBtn = document.getElementById('graphAddEnd');
+    const graphAddTerminalBBtn = document.getElementById('graphAddTerminalB');
     const graphCancelBtn = document.getElementById('graphCancel');
     const graphEmptyEl = document.getElementById('graphEmpty');
     const graphNodeListEl = document.getElementById('graphNodeList');
     const graphEdgeListEl = document.getElementById('graphEdgeList');
-    const graphStartLabelInput = document.getElementById('graphStartLabel');
-    const graphEndLabelInput = document.getElementById('graphEndLabel');
+    const graphTerminalALabelInput = document.getElementById('graphTerminalALabel');
+    const graphTerminalBLabelInput = document.getElementById('graphTerminalBLabel');
 
     const components = [];
     const stages = [];
@@ -728,11 +728,11 @@ Expected downtime (hours) = (1 − A) × window_hours
 
     function refreshGraphModeButtons() {
       const buttons = [
-        { btn: graphAddStartBtn, mode: 'add-start-terminal' },
+        { btn: graphAddTerminalABtn, mode: 'add-terminal-a' },
         { btn: graphAddNodeBtn, mode: 'add-node' },
         { btn: graphAddEdgeBtn, mode: 'add-edge' },
         { btn: graphAddMergeBtn, mode: 'add-merge' },
-        { btn: graphAddEndBtn, mode: 'add-end-terminal' },
+        { btn: graphAddTerminalBBtn, mode: 'add-terminal-b' },
       ];
       buttons.forEach(({ btn, mode }) => {
         if (!btn) return;
@@ -759,7 +759,7 @@ Expected downtime (hours) = (1 − A) × window_hours
 
     function getGraphNodeLabel(node) {
       if (node.type === 'terminal') {
-        const role = node.role === 'start' ? 'Start' : 'End';
+        const role = node.role === 'terminal-a' ? 'Terminal A' : 'Terminal B';
         return node.label ? `${role}: ${node.label}` : `${role} Terminal`;
       }
       if (node.type === 'merge') return node.label;
@@ -863,11 +863,11 @@ Expected downtime (hours) = (1 − A) × window_hours
         pendingEdgeStartId = null;
       }
       if (removed && removed.type === 'terminal') {
-        if (removed.role === 'start' && graphStartLabelInput) {
-          graphStartLabelInput.value = '';
+        if (removed.role === 'terminal-a' && graphTerminalALabelInput) {
+          graphTerminalALabelInput.value = '';
         }
-        if (removed.role === 'end' && graphEndLabelInput) {
-          graphEndLabelInput.value = '';
+        if (removed.role === 'terminal-b' && graphTerminalBLabelInput) {
+          graphTerminalBLabelInput.value = '';
         }
       }
     }
@@ -890,27 +890,27 @@ Expected downtime (hours) = (1 − A) × window_hours
       if (evt.target !== graphCanvas) return;
       if (!graphMode) return;
       const coords = getSVGCoordinates(evt);
-      if (graphMode === 'add-start-terminal') {
-        if (!graphStartLabelInput) return;
-        const label = graphStartLabelInput.value.trim();
+      if (graphMode === 'add-terminal-a') {
+        if (!graphTerminalALabelInput) return;
+        const label = graphTerminalALabelInput.value.trim();
         if (!label) {
-          alert('Provide a label for the start terminal before placing it.');
+          alert('Provide a label for Terminal A before placing it.');
           return;
         }
-        upsertTerminalNode('start', label, coords.x, coords.y);
+        upsertTerminalNode('terminal-a', label, coords.x, coords.y);
         setGraphMode(null);
         refreshGraph();
         computeSystem();
         return;
       }
-      if (graphMode === 'add-end-terminal') {
-        if (!graphEndLabelInput) return;
-        const label = graphEndLabelInput.value.trim();
+      if (graphMode === 'add-terminal-b') {
+        if (!graphTerminalBLabelInput) return;
+        const label = graphTerminalBLabelInput.value.trim();
         if (!label) {
-          alert('Provide a label for the end terminal before placing it.');
+          alert('Provide a label for Terminal B before placing it.');
           return;
         }
-        upsertTerminalNode('end', label, coords.x, coords.y);
+        upsertTerminalNode('terminal-b', label, coords.x, coords.y);
         setGraphMode(null);
         refreshGraph();
         computeSystem();
@@ -1050,7 +1050,9 @@ Expected downtime (hours) = (1 − A) × window_hours
         const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
         const classNames = ['graph-node'];
         if (node.type === 'merge') classNames.push('merge');
-        if (node.type === 'terminal') classNames.push('terminal', `terminal-${node.role}`);
+        if (node.type === 'terminal') {
+          classNames.push('terminal', node.role === 'terminal-a' ? 'terminal-a' : 'terminal-b');
+        }
         if (pendingEdgeStartId === node.id) classNames.push('pending');
         group.setAttribute('class', classNames.join(' '));
         group.dataset.id = node.id;
@@ -1063,7 +1065,7 @@ Expected downtime (hours) = (1 − A) × window_hours
           roleText.setAttribute('x', node.x);
           roleText.setAttribute('y', node.y + 4);
           roleText.setAttribute('class', 'terminal-role');
-          roleText.textContent = node.role === 'start' ? 'START' : 'END';
+          roleText.textContent = node.role === 'terminal-a' ? 'TERMINAL A' : 'TERMINAL B';
           group.appendChild(roleText);
         } else {
           const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
@@ -1120,7 +1122,7 @@ Expected downtime (hours) = (1 − A) × window_hours
           row.className = 'item';
           const span = document.createElement('span');
           if (node.type === 'terminal') {
-            const role = node.role === 'start' ? 'Start Terminal' : 'End Terminal';
+            const role = node.role === 'terminal-a' ? 'Terminal A' : 'Terminal B';
             const label = node.label ? node.label : 'Unlabeled';
             span.textContent = `${role} — ${label}`;
           } else if (node.type === 'merge') {
@@ -1142,18 +1144,18 @@ Expected downtime (hours) = (1 − A) × window_hours
             moveBtn.className = 'ghost';
             moveBtn.textContent = 'Move';
             moveBtn.addEventListener('click', () => {
-              if (node.role === 'start') {
-                if (graphStartLabelInput) {
-                  graphStartLabelInput.value = node.label;
-                  graphStartLabelInput.focus();
+              if (node.role === 'terminal-a') {
+                if (graphTerminalALabelInput) {
+                  graphTerminalALabelInput.value = node.label;
+                  graphTerminalALabelInput.focus();
                 }
-                setGraphMode('add-start-terminal');
+                setGraphMode('add-terminal-a');
               } else {
-                if (graphEndLabelInput) {
-                  graphEndLabelInput.value = node.label;
-                  graphEndLabelInput.focus();
+                if (graphTerminalBLabelInput) {
+                  graphTerminalBLabelInput.value = node.label;
+                  graphTerminalBLabelInput.focus();
                 }
-                setGraphMode('add-end-terminal');
+                setGraphMode('add-terminal-b');
               }
             });
             row.appendChild(moveBtn);
@@ -1207,9 +1209,9 @@ Expected downtime (hours) = (1 − A) × window_hours
       if (!graphNodes.length) {
         return [];
       }
-      const startNode = getTerminalNode('start');
-      const endNode = getTerminalNode('end');
-      if (!startNode || !endNode) {
+      const terminalANode = getTerminalNode('terminal-a');
+      const terminalBNode = getTerminalNode('terminal-b');
+      if (!terminalANode || !terminalBNode) {
         return [];
       }
 
@@ -1231,8 +1233,8 @@ Expected downtime (hours) = (1 − A) × window_hours
         reverseAdjacency.get(edge.to).push(edge.from);
       });
 
-      const forwardReachable = new Set([startNode.id]);
-      const forwardQueue = [startNode.id];
+      const forwardReachable = new Set([terminalANode.id]);
+      const forwardQueue = [terminalANode.id];
       for (let i = 0; i < forwardQueue.length; i += 1) {
         const current = forwardQueue[i];
         const neighbors = adjacency.get(current) || [];
@@ -1244,8 +1246,8 @@ Expected downtime (hours) = (1 − A) × window_hours
         });
       }
 
-      const backwardReachable = new Set([endNode.id]);
-      const backwardQueue = [endNode.id];
+      const backwardReachable = new Set([terminalBNode.id]);
+      const backwardQueue = [terminalBNode.id];
       for (let i = 0; i < backwardQueue.length; i += 1) {
         const current = backwardQueue[i];
         const neighbors = reverseAdjacency.get(current) || [];
@@ -1264,7 +1266,7 @@ Expected downtime (hours) = (1 − A) × window_hours
         }
       });
 
-      if (!relevantIds.has(startNode.id) || !relevantIds.has(endNode.id)) {
+      if (!relevantIds.has(terminalANode.id) || !relevantIds.has(terminalBNode.id)) {
         return [];
       }
 
@@ -1287,14 +1289,14 @@ Expected downtime (hours) = (1 − A) × window_hours
       });
 
       topoQueue.sort((a, b) => {
-        if (a === startNode.id) return -1;
-        if (b === startNode.id) return 1;
+        if (a === terminalANode.id) return -1;
+        if (b === terminalANode.id) return 1;
         return 0;
       });
 
       const indegreeCopy = new Map(indegree);
       const depth = new Map();
-      depth.set(startNode.id, 0);
+      depth.set(terminalANode.id, 0);
 
       for (let i = 0; i < topoQueue.length; i += 1) {
         const current = topoQueue[i];
@@ -1311,7 +1313,7 @@ Expected downtime (hours) = (1 − A) × window_hours
         });
       }
 
-      if (!depth.has(endNode.id)) {
+      if (!depth.has(terminalBNode.id)) {
         return [];
       }
 
@@ -1824,11 +1826,11 @@ Expected downtime (hours) = (1 − A) × window_hours
       mergeDotCount = 1;
       pendingEdgeStartId = null;
       derivedGraphStages = [];
-      if (graphStartLabelInput) {
-        graphStartLabelInput.value = '';
+      if (graphTerminalALabelInput) {
+        graphTerminalALabelInput.value = '';
       }
-      if (graphEndLabelInput) {
-        graphEndLabelInput.value = '';
+      if (graphTerminalBLabelInput) {
+        graphTerminalBLabelInput.value = '';
       }
       setGraphMode(null);
       resetForm();
@@ -1839,15 +1841,19 @@ Expected downtime (hours) = (1 − A) × window_hours
     }
 
     function seedData() {
-      const defaultStartLabel = 'Service Entry';
-      const defaultEndLabel = 'Service Exit';
-      const startLabel = graphStartLabelInput ? graphStartLabelInput.value.trim() || defaultStartLabel : defaultStartLabel;
-      const endLabel = graphEndLabelInput ? graphEndLabelInput.value.trim() || defaultEndLabel : defaultEndLabel;
-      if (graphStartLabelInput) {
-        graphStartLabelInput.value = startLabel;
+      const defaultTerminalALabel = 'Terminal A';
+      const defaultTerminalBLabel = 'Terminal B';
+      const terminalALabel = graphTerminalALabelInput
+        ? graphTerminalALabelInput.value.trim() || defaultTerminalALabel
+        : defaultTerminalALabel;
+      const terminalBLabel = graphTerminalBLabelInput
+        ? graphTerminalBLabelInput.value.trim() || defaultTerminalBLabel
+        : defaultTerminalBLabel;
+      if (graphTerminalALabelInput) {
+        graphTerminalALabelInput.value = terminalALabel;
       }
-      if (graphEndLabelInput) {
-        graphEndLabelInput.value = endLabel;
+      if (graphTerminalBLabelInput) {
+        graphTerminalBLabelInput.value = terminalBLabel;
       }
 
       components.push(
@@ -1863,19 +1869,19 @@ Expected downtime (hours) = (1 − A) × window_hours
         { id: nextStageId++, name: 'Security Tier', type: 'series', componentIds: [4] },
       );
 
-      const startTerminal = upsertTerminalNode('start', startLabel, 80, 200);
+      const terminalANode = upsertTerminalNode('terminal-a', terminalALabel, 80, 200);
       const entryMerge = addMergeDotNode(320, 220);
       const routerA = addGraphNodeFromComponent(1, 160, 160);
       const routerB = addGraphNodeFromComponent(2, 160, 280);
       const core = addGraphNodeFromComponent(3, 480, 200);
       const firewall = addGraphNodeFromComponent(4, 640, 200);
-      const endTerminal = upsertTerminalNode('end', endLabel, 760, 200);
+      const terminalBNode = upsertTerminalNode('terminal-b', terminalBLabel, 760, 200);
 
-      if (startTerminal && routerA) {
-        graphEdges.push({ id: nextGraphEdgeId++, from: startTerminal.id, to: routerA.id });
+      if (terminalANode && routerA) {
+        graphEdges.push({ id: nextGraphEdgeId++, from: terminalANode.id, to: routerA.id });
       }
-      if (startTerminal && routerB) {
-        graphEdges.push({ id: nextGraphEdgeId++, from: startTerminal.id, to: routerB.id });
+      if (terminalANode && routerB) {
+        graphEdges.push({ id: nextGraphEdgeId++, from: terminalANode.id, to: routerB.id });
       }
       if (routerA && entryMerge) {
         graphEdges.push({ id: nextGraphEdgeId++, from: routerA.id, to: entryMerge.id });
@@ -1889,8 +1895,8 @@ Expected downtime (hours) = (1 − A) × window_hours
       if (core && firewall) {
         graphEdges.push({ id: nextGraphEdgeId++, from: core.id, to: firewall.id });
       }
-      if (firewall && endTerminal) {
-        graphEdges.push({ id: nextGraphEdgeId++, from: firewall.id, to: endTerminal.id });
+      if (firewall && terminalBNode) {
+        graphEdges.push({ id: nextGraphEdgeId++, from: firewall.id, to: terminalBNode.id });
       }
     }
 
@@ -1903,13 +1909,13 @@ Expected downtime (hours) = (1 − A) × window_hours
       refreshComponents();
       refreshStages();
     });
-    if (graphAddStartBtn) {
-      graphAddStartBtn.addEventListener('click', () => {
-        const existing = getTerminalNode('start');
-        if (existing && graphStartLabelInput && !graphStartLabelInput.value.trim()) {
-          graphStartLabelInput.value = existing.label;
+    if (graphAddTerminalABtn) {
+      graphAddTerminalABtn.addEventListener('click', () => {
+        const existing = getTerminalNode('terminal-a');
+        if (existing && graphTerminalALabelInput && !graphTerminalALabelInput.value.trim()) {
+          graphTerminalALabelInput.value = existing.label;
         }
-        setGraphMode(graphMode === 'add-start-terminal' ? null : 'add-start-terminal');
+        setGraphMode(graphMode === 'add-terminal-a' ? null : 'add-terminal-a');
       });
     }
     if (graphAddNodeBtn) {
@@ -1935,13 +1941,13 @@ Expected downtime (hours) = (1 − A) × window_hours
         setGraphMode(graphMode === 'add-merge' ? null : 'add-merge');
       });
     }
-    if (graphAddEndBtn) {
-      graphAddEndBtn.addEventListener('click', () => {
-        const existing = getTerminalNode('end');
-        if (existing && graphEndLabelInput && !graphEndLabelInput.value.trim()) {
-          graphEndLabelInput.value = existing.label;
+    if (graphAddTerminalBBtn) {
+      graphAddTerminalBBtn.addEventListener('click', () => {
+        const existing = getTerminalNode('terminal-b');
+        if (existing && graphTerminalBLabelInput && !graphTerminalBLabelInput.value.trim()) {
+          graphTerminalBLabelInput.value = existing.label;
         }
-        setGraphMode(graphMode === 'add-end-terminal' ? null : 'add-end-terminal');
+        setGraphMode(graphMode === 'add-terminal-b' ? null : 'add-terminal-b');
       });
     }
     if (graphCancelBtn) {
