@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RBD Simulator — Exact Series/Parallel Reduction (v2)</title>
+  <style>
+    :root{ --bg:#0b1020;--panel:#131a2b;--accent:#5dd6ff;--accent2:#9effa1;--text:#e8f0ff;--muted:#a7b1c7;--danger:#ff6b6b }
+    *{box-sizing:border-box}
+    html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+    .app{display:grid;grid-template-columns:320px 1fr 420px;grid-template-rows:auto 1fr;gap:10px;height:100%}
+    header{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:linear-gradient(180deg,#11182b,#0c1224);border-bottom:1px solid #1b2440}
+    header .title{font-weight:700;letter-spacing:.2px}
+    header .btns button{margin-left:8px}
+
+    .left, .right{background:var(--panel);border:1px solid #1b2440;border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:10px}
+    .section{background:rgba(255,255,255,.03);border:1px solid #1b2440;border-radius:10px;padding:10px}
+    .palette{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+    .palette button{height:72px;border-radius:10px;border:1px dashed #2a355e;background:#111937;color:var(--text);cursor:pointer}
+    .palette button.active{outline:2px solid var(--accent)}
+
+    .toolrow{display:flex;gap:8px;flex-wrap:wrap}
+    button, input{background:#0e1530;color:var(--text);border:1px solid #2a355e;border-radius:8px;padding:8px}
+    button{cursor:pointer}
+    button.primary{background:linear-gradient(180deg,#193a65,#12294b);border-color:#244c86}
+    button.ghost{background:#0b1227}
+    button.danger{background:#2b0f17;border-color:#61202c;color:#ffd6da}
+    .hint{color:var(--muted);font-size:12px}
+
+    canvas{width:100%;height:100%;display:block;background:radial-gradient(1200px 800px at 40% 30%,#0e1530 0%,#0b1020 60%)}
+
+    .chip{display:inline-flex;align-items:center;gap:6px;background:#0e1735;border:1px solid #283463;padding:6px 10px;border-radius:999px;font-size:12px;color:#b9c6ff}
+
+    .stat{display:grid;grid-template-columns:1fr auto;gap:6px 10px;margin:6px 0}
+    .stat .label{color:#aab7e6}
+    .stat .value{font-variant-numeric:tabular-nums}
+
+    .inspector input[type="number"]{width:120px}
+    .inspector .row{display:flex;align-items:center;justify-content:space-between;margin:6px 0}
+
+    .legend{display:flex;gap:8px;flex-wrap:wrap}
+    .legend .legend-item{display:flex;align-items:center;gap:6px}
+    .legend .dot{width:10px;height:10px;border-radius:50%}
+
+    .object-list{max-height:200px;overflow:auto}
+    .object-list .item{display:flex;justify-content:space-between;align-items:center;padding:6px;border-bottom:1px solid #1b2440}
+    .object-list .item .name{font-weight:600}
+
+    .footer{font-size:12px;color:#94a2ce}
+
+    .kbd{padding:2px 6px;border-radius:6px;border:1px solid #2a355e;background:#0a142e;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}
+
+    .pill{display:inline-block;padding:2px 8px;border-radius:999px;border:1px solid #2a355e;background:#0f1838;color:#b7c6ff;font-size:12px}
+
+    pre.log{max-height:220px;overflow:auto;background:#0a142c;border:1px solid #223057;border-radius:8px;padding:8px;font-size:12px;color:#d7e3ff}
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <div class="title">🧩 RBD — Exact Series/Parallel Reduction (v2)</div>
+      <div class="btns">
+        <button id="exportBtn" class="ghost">Export JSON</button>
+        <button id="importBtn" class="ghost">Import JSON</button>
+        <button id="resetBtn" class="danger">Reset</button>
+      </div>
+    </header>
+
+    <aside class="left">
+      <div class="section">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+          <div style="font-weight:700">Palette</div>
+          <span class="pill">Mode: <span id="modeLabel">Select/Move</span></span>
+        </div>
+        <div class="palette">
+          <button class="tool" data-tool="select">🖱️ Select/Move</button>
+          <button class="tool" data-tool="connect">🔗 Connect</button>
+          <button class="tool" data-tool="delete">🗑️ Delete</button>
+          <button class="tool" data-tool="router">🟦 Block (Router)</button>
+          <button class="tool" data-tool="switch">🟩 Block (Switch)</button>
+          <button class="tool" data-tool="firewall">🟥 Block (Firewall)</button>
+        </div>
+        <div class="hint" style="margin-top:8px">
+          In <b>Connect</b> mode: click first node then second to link once. Hold <span class="kbd">Shift</span> to chain; click empty space or press <span class="kbd">Esc</span> to cancel.
+          Start and End clouds are fixed and cannot be removed or added.
+        </div>
+      </div>
+
+      <div class="section">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <div style="font-weight:700">Graph</div>
+          <div class="legend">
+            <span class="legend-item"><span class="dot" style="background:#5dd6ff"></span>Block</span>
+            <span class="legend-item"><span class="dot" style="background:#9effa1"></span>Cloud</span>
+            <span class="legend-item"><span class="dot" style="background:#ffd36b"></span>Selected</span>
+          </div>
+        </div>
+        <div class="toolrow" style="margin-top:6px">
+          <button id="fitBtn" class="ghost">Fit View</button>
+          <button id="snapBtn" class="ghost">Snap Layout</button>
+          <button id="clearEdgesBtn" class="ghost">Clear Edges</button>
+          <button id="calcBtn" class="primary">Calculate (Exact)</button>
+        </div>
+      </div>
+
+      <div class="section">
+        <div style="font-weight:700">Objects</div>
+        <div class="object-list" id="objectList"></div>
+      </div>
+
+      <div class="footer">
+        Shortcuts: <span class="kbd">1</span> Select, <span class="kbd">2</span> Connect, <span class="kbd">Del</span> delete, <span class="kbd">Ctrl/Cmd+S</span> save, <span class="kbd">Esc</span> cancel connect.
+      </div>
+    </aside>
+
+    <main>
+      <canvas id="canvas"></canvas>
+    </main>
+
+    <aside class="right">
+      <div class="section inspector">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div style="font-weight:700">Inspector</div>
+          <button id="deselectBtn" class="ghost">Deselect</button>
+        </div>
+        <div id="inspectorContent" class="hint">Select a block to edit its properties.</div>
+      </div>
+
+      <div class="section">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div style="font-weight:700">Results (Exact SP)</div>
+          <span class="chip">SP‑Reducible Only</span>
+        </div>
+        <div class="stat"><div class="label">System Reliability</div><div id="relOut" class="value">—</div></div>
+        <div class="stat"><div class="label">Unreliability (Q = 1 − R)</div><div id="unrelOut" class="value">—</div></div>
+        <div class="stat"><div class="label">Status</div><div id="statusOut" class="value">—</div></div>
+        <pre id="log" class="log" style="display:none"></pre>
+        <div class="hint">Series: R = ∏Rᵢ. Parallel: R = 1 − ∏(1 − Rᵢ). The algorithm reduces parallel edges and degree‑2 interior vertices until a single S–T edge remains.</div>
+      </div>
+    </aside>
+  </div>
+
+  <script>
+    const $ = (sel)=>document.querySelector(sel);
+    const canvas = $('#canvas');
+    const ctx = canvas.getContext('2d');
+    let DPI = 1;
+
+    function resize(){ const r = window.devicePixelRatio || 1; DPI = r; const rect = canvas.getBoundingClientRect(); canvas.width=Math.floor(rect.width*r); canvas.height=Math.floor(rect.height*r); draw(); }
+    window.addEventListener('resize', resize);
+
+    const Tools={SELECT:'select',CONNECT:'connect',DELETE:'delete',ROUTER:'router',SWITCH:'switch',FIREWALL:'firewall'}; // removed CLOUD tool
+    let state={tool:Tools.SELECT,nodes:[],edges:[],selId:null,connectingFrom:null,nextId:1};
+    const defaults={rel:0.99};
+
+    function clearConnecting(){ state.connectingFrom=null; }
+
+    function ensureFixedTerminals(){
+      // exactly one start and one end; create if missing; make unremovable
+      let start = state.nodes.find(n=>n.role==='start');
+      let end = state.nodes.find(n=>n.role==='end');
+      if(!start){ addNode('cloud', 120, canvas.height/2||300, {role:'start', name:'Start', rel:1}); }
+      if(!end){ addNode('cloud', (canvas.width-120)||900, canvas.height/2||300, {role:'end', name:'End', rel:1}); }
+    }
+
+    function addNode(type,x,y,extra={}){
+      // block adding arbitrary clouds from UI (type will only be router/switch/firewall here)
+      const id=state.nextId++;
+      const base={id,type,x,y,w:120,h:58,name:(extra.name?extra.name:(type==='cloud'?'Cloud':'Block')+' '+id),rel:defaults.rel,role:null, locked:false};
+      Object.assign(base,extra);
+      if(base.role==='start' || base.role==='end'){ base.locked=true; base.type='cloud'; base.rel=1.0; }
+      state.nodes.push(base);
+      selectNode(id);
+      schedulePersist(); draw();
+    }
+
+    function deleteSelected(){ if(!state.selId) return; const id=state.selId; const node=state.nodes.find(n=>n.id===id); if(node && (node.locked)){ alert('Start/End cannot be removed.'); return; } state.nodes=state.nodes.filter(n=>n.id!==id); state.edges=state.edges.filter(e=>e.a!==id && e.b!==id); state.selId=null; updateInspector(); buildObjectList(); schedulePersist(); draw(); }
+
+    function toggleTool(t){ state.tool=t; $('#modeLabel').textContent=({select:'Select/Move',connect:'Connect',delete:'Delete',router:'Block (Router)',switch:'Block (Switch)',firewall:'Block (Firewall)'})[t]; document.querySelectorAll('.palette .tool').forEach(b=>b.classList.toggle('active', b.dataset.tool===t)); if(t!==Tools.CONNECT) clearConnecting(); }
+    document.querySelectorAll('.palette .tool').forEach(btn=>btn.addEventListener('click',()=>toggleTool(btn.dataset.tool)));
+
+    window.addEventListener('keydown',(e)=>{ if(e.key==='1') toggleTool(Tools.SELECT); if(e.key==='2') toggleTool(Tools.CONNECT); if(e.key==='Escape') clearConnecting(); if(e.key==='Delete') deleteSelected(); if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='s'){ e.preventDefault(); persist(); } })
+
+    let dragging=null; let dragOffset={x:0,y:0};
+    canvas.addEventListener('mousedown',(e)=>{ const p=toCanvas(e); const hit=hitTest(p.x,p.y);
+      if(state.tool===Tools.SELECT){ if(hit){ selectNode(hit.id); dragging=hit; dragOffset={x:p.x-hit.x,y:p.y-hit.y}; } else { state.selId=null; updateInspector(); draw(); } }
+      else if(state.tool===Tools.CONNECT){ if(hit){ if(state.connectingFrom==null){ state.connectingFrom=hit.id; state.selId=hit.id; draw(); } else if(state.connectingFrom!==hit.id){ addEdge(state.connectingFrom, hit.id); state.selId=hit.id; if(e.shiftKey) state.connectingFrom=hit.id; else clearConnecting(); } } else { clearConnecting(); } }
+      else if(state.tool===Tools.DELETE){ if(hit){ state.selId=hit.id; deleteSelected(); } }
+      else { const type=state.tool; addNode(type,p.x,p.y); toggleTool(Tools.SELECT); }
+    });
+    canvas.addEventListener('mousemove',(e)=>{ const p=toCanvas(e); if(dragging){ dragging.x=p.x-dragOffset.x; dragging.y=p.y-dragOffset.y; draw(); } })
+    window.addEventListener('mouseup',()=>{ if(dragging){ dragging=null; schedulePersist(); draw(); } })
+
+    function addEdge(a,b){ if(a===b) return; if(state.edges.some(e=> (e.a===a&&e.b===b)||(e.a===b&&e.b===a))) return; state.edges.push({a,b}); schedulePersist(); draw(); }
+
+    function toCanvas(e){ const r=canvas.getBoundingClientRect(); return {x:(e.clientX-r.left)*DPI, y:(e.clientY-r.top)*DPI}; }
+    function hitTest(x,y){ for(let i=state.nodes.length-1;i>=0;i--){ const n=state.nodes[i]; if(x>=n.x-n.w/2 && x<=n.x+n.w/2 && y>=n.y-n.h/2 && y<=n.y+n.h/2) return n; } return null; }
+    function selectNode(id){ state.selId=id; updateInspector(); draw(); }
+
+    function draw(){ if(!canvas.width) resize(); ctx.clearRect(0,0,canvas.width,canvas.height); ctx.lineWidth=2*DPI; ctx.strokeStyle='#35508a'; state.edges.forEach(e=>{ const a=state.nodes.find(n=>n.id===e.a); const b=state.nodes.find(n=>n.id===e.b); if(a&&b){ ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke(); } }); state.nodes.forEach(n=>drawNode(n)); }
+
+    function drawNode(n){ const isCloud=(n.role==='start'||n.role==='end'); const r=12*DPI; const w=n.w,h=n.h; const x=n.x-w/2,y=n.y-h/2; const path=new Path2D(); path.moveTo(x+r,y); path.arcTo(x+w,y,x+w,y+h,r); path.arcTo(x+w,y+h,x,y+h,r); path.arcTo(x,y+h,x,y,r); path.arcTo(x,y,x+w,y,r); ctx.fillStyle=isCloud?'rgba(158,255,161,0.15)':'rgba(93,214,255,0.12)'; ctx.strokeStyle=(state.selId===n.id)?'#ffd36b':(isCloud?'#4b7e4f':'#2a92a6'); ctx.lineWidth=(state.selId===n.id?3:2)*DPI; ctx.fill(path); ctx.stroke(path); ctx.font=`${12*DPI}px ui-sans-serif,system-ui`; ctx.textAlign='center'; ctx.textBaseline='middle'; const icon=(n.role==='start'?'☁️':n.role==='end'?'☁️':(n.type==='router'?'🟦':n.type==='switch'?'🟩':'🟥')); ctx.fillStyle='#e8f0ff'; ctx.fillText(icon+' '+n.name, n.x, n.y-8*DPI); const R=nodeReliability(n); ctx.fillStyle='#a8b6e8'; ctx.fillText(`R=${(R*100).toFixed(5)}%`, n.x, n.y+10*DPI); }
+
+    function nodeReliability(n){ if(n.role==='start'||n.role==='end') return 1; const r=Number(n.rel); if(!isFinite(r)) return 1; return Math.max(0,Math.min(1,r)); }
+
+    function updateInspector(){ const pane=$('#inspectorContent'); const n=state.nodes.find(n=>n.id===state.selId); if(!n){ pane.innerHTML='<span class="hint">Select a block to edit its properties.</span>'; return; } const isTerminal=(n.role==='start'||n.role==='end'); pane.innerHTML=`
+      <div class="row"><span>Type</span><span class="chip">${isTerminal?n.role.toUpperCase():n.type.toUpperCase()}</span></div>
+      <div class="row"><span>ID</span><span class="chip">${n.id}</span></div>
+      <div class="row"><span>Name</span><input id="inpName" ${isTerminal?'disabled':''} value="${n.name}"></div>
+      <div class="row"><span>Reliability R (0..1)</span><input id="inpREL" type="number" min="0" max="1" step="0.000001" ${isTerminal?'disabled':''} value="${isFinite(n.rel)?n.rel:''}"></div>
+      <div class="row"><span>R (%)</span><span class="chip">${(nodeReliability(n)*100).toFixed(6)}%</span></div>
+      <div class="toolrow"><button id="applyBtn" class="primary" ${isTerminal?'disabled':''}>Apply</button><button id="deleteBtn" class="danger" ${isTerminal?'disabled':''}>Delete</button></div>
+      ${isTerminal?`<div class="hint">Fixed terminal (uneditable, unremovable).</div>`:''}
+    `; $('#applyBtn') && ($('#applyBtn').onclick=()=>{ if(isTerminal) return; n.name=$('#inpName').value.trim()||n.name; const rel=parseFloat($('#inpREL').value); if(isFinite(rel)) n.rel=Math.max(0,Math.min(1,rel)); schedulePersist(); draw(); updateInspector(); buildObjectList(); }); $('#deleteBtn') && ($('#deleteBtn').onclick=()=>{ if(isTerminal) return; selectNode(n.id); deleteSelected(); }); }
+
+    $('#deselectBtn').onclick=()=>{ state.selId=null; updateInspector(); draw(); };
+
+    function buildObjectList(){ const box=$('#objectList'); box.innerHTML=''; state.nodes.filter(n=>!(n.role==='start'||n.role==='end')).forEach(n=>{ const div=document.createElement('div'); div.className='item'; div.innerHTML=`<span class="name">${n.name}</span><span class="hint">R=${(nodeReliability(n)*100).toFixed(4)}%</span>`; div.onclick=()=>{ selectNode(n.id); }; box.appendChild(div); }); }
+
+    // Fit & helpers
+    $('#fitBtn').onclick=()=>{ const midY=canvas.height/2; const start=state.nodes.find(n=>n.role==='start'); const end=state.nodes.find(n=>n.role==='end'); if(start){ start.x=120*DPI; start.y=midY; } if(end){ end.x=canvas.width-120*DPI; end.y=midY; } draw(); schedulePersist(); };
+    $('#snapBtn').onclick=()=>{ state.nodes.forEach(n=>{ if(!(n.role==='start'||n.role==='end')){ n.x=Math.round(n.x/20)*20; n.y=Math.round(n.y/20)*20; }}); draw(); schedulePersist(); };
+    $('#clearEdgesBtn').onclick=()=>{ state.edges=[]; schedulePersist(); draw(); };
+
+    // Export/Import/Reset
+    $('#exportBtn').onclick=()=>{ const data=JSON.stringify(state,null,2); const blob=new Blob([data],{type:'application/json'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='rbd_sp_graph.json'; a.click(); URL.revokeObjectURL(url); };
+    $('#importBtn').onclick=()=>{ const inp=document.createElement('input'); inp.type='file'; inp.accept='.json,application/json'; inp.onchange=()=>{ const f=inp.files[0]; if(!f) return; const reader=new FileReader(); reader.onload=()=>{ try{ const obj=JSON.parse(reader.result); if(obj && obj.nodes && obj.edges){ state=obj; ensureFixedTerminals(); draw(); updateInspector(); buildObjectList(); persist(); } }catch(err){ alert('Invalid JSON'); } }; reader.readAsText(f); }; inp.click(); };
+    $('#resetBtn').onclick=()=>{ if(confirm('Reset graph?')){ state={tool:Tools.SELECT,nodes:[],edges:[],selId:null,connectingFrom:null,nextId:1}; ensureFixedTerminals(); buildObjectList(); updateInspector(); draw(); persist(); } };
+
+    toggleTool(Tools.SELECT);
+
+    // Persistence
+    let persistTimer=null; function persist(){ localStorage.setItem('rbd_sp_exact_state_v2', JSON.stringify(state)); }
+    function schedulePersist(){ clearTimeout(persistTimer); persistTimer=setTimeout(persist,250); }
+    (function load(){ const raw=localStorage.getItem('rbd_sp_exact_state_v2'); if(raw){ try{ state=JSON.parse(raw);}catch{} } resize(); ensureFixedTerminals(); draw(); buildObjectList(); updateInspector(); })();
+
+    // ==== Exact Series/Parallel Reduction (directed edge network from node model) ====
+    function logLine(s){ const el=$('#log'); el.style.display='block'; el.textContent += s + "\n"; }
+    function clearLog(){ const el=$('#log'); el.textContent=''; el.style.display='none'; }
+
+    // Build a directed edge-reliability network using left-to-right orientation
+    function buildEdgeReliabilityGraph(){
+      const start=state.nodes.find(n=>n.role==='start'); const end=state.nodes.find(n=>n.role==='end'); if(!start||!end) return null;
+      const V=new Set(); const E=[]; // edges: {u,v,r}
+      const v_in = (id)=>`n${id}i`; const v_out=(id)=>`n${id}o`;
+      const S=v_out(start.id); const T=v_in(end.id);
+
+      // device split edges (reliability)
+      for(const n of state.nodes){ if(n.role==='start'||n.role==='end') continue; const a=v_in(n.id), b=v_out(n.id); V.add(a); V.add(b); E.push({u:a,v:b,r:nodeReliability(n)}); }
+      V.add(S); V.add(T);
+
+      // orient each link left->right based on x (tie-breaker by id) and add ONE perfect edge
+      function leftRight(a,b){ if(a.x<b.x) return [a,b]; if(a.x>b.x) return [b,a]; return [a.id<b.id?a:b, a.id<b.id?b:a]; }
+      for(const e of state.edges){ const a=state.nodes.find(n=>n.id===e.a); const b=state.nodes.find(n=>n.id===e.b); if(!a||!b) continue; const [L,R]=leftRight(a,b); const Lout=(L.role==='start')?S:v_out(L.id); const Rin=(R.role==='end')?T:v_in(R.id); E.push({u:Lout, v:Rin, r:1}); }
+
+      return {V,E,S,T};
+    }
+
+    function calcExact(){ clearLog(); const status=$('#statusOut'); status.textContent='Reducing...'; const net=buildEdgeReliabilityGraph(); if(!net){ $('#relOut').textContent='—'; $('#unrelOut').textContent='—'; status.textContent='No terminals'; return; } const {V,E,S,T}=net; logLine(`Start |V|=${V.size}, |E|=${E.length}`);
+      let changed=true; let safety=10000;
+      while(changed && safety-->0){ changed=false;
+        // 1) Parallel (same direction u->v)
+        const grouped=new Map(); for(const e of E){ const key=`${e.u}|${e.v}`; if(!grouped.has(key)) grouped.set(key,[]); grouped.get(key).push(e.r); }
+        for(const [key,arr] of grouped){ if(arr.length>1){ const [u,v]=key.split('|'); const rp=1-arr.reduce((acc,r)=>acc*(1-r),1); for(let i=E.length-1;i>=0;i--){ const k=`${E[i].u}|${E[i].v}`; if(k===key) E.splice(i,1); } E.push({u,v,r:rp}); changed=true; logLine(`Parallel: ${key} -> r=${rp.toFixed(6)}`);} }
+        if(changed) continue;
+        // 2) Series (vertex with exactly one incoming and one outgoing; not terminals)
+        const inDeg=new Map(), outDeg=new Map(), incoming=new Map(), outgoing=new Map();
+        for(const e of E){ outDeg.set(e.u,(outDeg.get(e.u)||0)+1); inDeg.set(e.v,(inDeg.get(e.v)||0)+1); (incoming.get(e.v)||incoming.set(e.v,[]), incoming.get(e.v).push(e)); (outgoing.get(e.u)||outgoing.set(e.u,[]), outgoing.get(e.u).push(e)); }
+        let reduced=false; for(const v of new Set([...inDeg.keys(),...outDeg.keys()])){ if(v===S||v===T) continue; const indeg=inDeg.get(v)||0, outdeg=outDeg.get(v)||0; if(indeg===1 && outdeg===1){ const eIn=incoming.get(v)[0]; const eOut=outgoing.get(v)[0]; const rs=eIn.r*eOut.r; // combine
+            // remove eIn and eOut, add edge eIn.u -> eOut.v
+            E.splice(E.indexOf(eIn),1); E.splice(E.indexOf(eOut),1);
+            E.push({u:eIn.u, v:eOut.v, r:rs});
+            logLine(`Series: collapse ${eIn.u}->${v}->${eOut.v} => r=${rs.toFixed(6)}`);
+            reduced=true; changed=true; break; } }
+        if(reduced) continue;
+      }
+      // final parallel sweep
+      const grouped=new Map(); for(const e of E){ const key=`${e.u}|${e.v}`; if(!grouped.has(key)) grouped.set(key,[]); grouped.get(key).push(e.r); }
+      for(const [key,arr] of grouped){ if(arr.length>1){ const [u,v]=key.split('|'); const rp=1-arr.reduce((acc,r)=>acc*(1-r),1); for(let i=E.length-1;i>=0;i--){ const k=`${E[i].u}|${E[i].v}`; if(k===key) E.splice(i,1); } E.push({u,v,r:rp}); logLine(`Parallel(final): ${key} -> r=${rp.toFixed(6)}`); } }
+
+      // result: collapse to single S->T edge or multiple parallel S->T edges
+      let R=null; for(const e of E){ if(e.u===S && e.v===T){ R = (R==null)? e.r : 1 - (1-R)*(1-e.r); } }
+      if(R!=null){ $('#relOut').textContent=(R*100).toFixed(6)+'%'; $('#unrelOut').textContent=((1-R)*100).toFixed(6)+'%'; $('#statusOut').textContent='Exact (SP reduced)'; }
+      else { $('#relOut').textContent='—'; $('#unrelOut').textContent='—'; $('#statusOut').textContent='Graph not series/parallel reducible to single S→T'; logLine('Stopped: residual structure is not SP‑reducible.'); }
+    }
+
+    // Wire button
+    $('#calcBtn').onclick=calcExact;
+
+    // ----------------------------
+    // Self-tests (deterministic exact)
+    // ----------------------------
+    function buildEmptyGraph(){ state={tool:Tools.SELECT,nodes:[],edges:[],selId:null,connectingFrom:null,nextId:1}; addNode('cloud',100,200,{role:'start',name:'Start'}); addNode('cloud',700,200,{role:'end',name:'End'}); }
+    function addR(type,R,x,y){ addNode(type,x,y,{rel:R}); return state.nodes[state.nodes.length-1].id; }
+    function connect(id1,id2){ state.edges.push({a:id1,b:id2}); }
+
+    function runSelfTests(){ const log=$('#log'); log.style.display='block'; log.textContent='Running exact SP tests...\n'; const save=JSON.parse(JSON.stringify(state)); const results=[];
+      // 1) Simple chain: Start-3-4-End => R=R3*R4
+      buildEmptyGraph(); let S=state.nodes.find(n=>n.role==='start').id; let T=state.nodes.find(n=>n.role==='end').id; let n3=addR('router',0.9,300,200); let n4=addR('firewall',0.8,500,200); connect(S,n3); connect(n3,n4); connect(n4,T); calcExact(); let got=parseFloat($('#relOut').textContent)/100; results.push({name:'Series 0.9·0.8', expected:0.72, got});
+      // 2) Parallel 0.9 || 0.8
+      buildEmptyGraph(); S=state.nodes.find(n=>n.role==='start').id; T=state.nodes.find(n=>n.role==='end').id; let p1=addR('switch',0.9,300,160); let p2=addR('switch',0.8,300,240); connect(S,p1); connect(p1,T); connect(S,p2); connect(p2,T); calcExact(); got=parseFloat($('#relOut').textContent)/100; results.push({name:'Parallel 0.9 || 0.8', expected:0.98, got});
+      // 3) Mixed
+      buildEmptyGraph(); S=state.nodes.find(n=>n.role==='start').id; T=state.nodes.find(n=>n.role==='end').id; let m1=addR('router',0.9,300,160); let m2=addR('firewall',0.8,500,160); let m3=addR('firewall',0.95,400,260); connect(S,m1); connect(m1,m2); connect(m2,T); connect(S,m3); connect(m3,T); calcExact(); got=parseFloat($('#relOut').textContent)/100; results.push({name:'Mixed (0.9·0.8) || 0.95', expected:0.986, got});
+      // 4) Non-SP motif (Wheatstone-like) — expect not reducible
+      buildEmptyGraph(); S=state.nodes.find(n=>n.role==='start').id; T=state.nodes.find(n=>n.role==='end').id; let a=addR('router',0.9,250,160); let b=addR('router',0.9,250,240); let c=addR('router',0.9,450,200); connect(S,a); connect(S,b); connect(a,c); connect(b,c); connect(c,T); calcExact(); const status=$('#statusOut').textContent; results.push({name:'Non‑SP bridge motif', expectedStatus:'Graph not series/parallel reducible to single S→T', gotStatus:status});
+
+      state=save; draw(); buildObjectList(); updateInspector();
+      for(const r of results){ if(r.expected!==undefined){ const pass=Math.abs(r.got - r.expected) < 1e-9; log.textContent+=`${r.name}: expected ${(r.expected*100).toFixed(3)}% got ${(r.got*100).toFixed(3)}% => ${pass?'PASS':'FAIL'}\n`; } else { const pass=r.gotStatus===r.expectedStatus; log.textContent+=`${r.name}: expected "${r.expectedStatus}" got "${r.gotStatus}" => ${pass?'PASS':'FAIL'}\n`; } }
+      log.textContent+='Done.';
+    }
+
+    // Hook up tests to Shift+T for convenience (and button below if you want)
+    document.addEventListener('keydown',(e)=>{ if(e.shiftKey && e.key.toLowerCase()==='t') runSelfTests(); });
+
+    // initial
+    $('#calcBtn').onclick=calcExact; // top-left button too
+    const testBtn=document.createElement('button'); testBtn.textContent='Run Self‑Tests'; testBtn.className='ghost'; testBtn.onclick=runSelfTests; // not placed in DOM right panel (kept simple)
+    resize();
+  </script>
+</body>
+</html>
