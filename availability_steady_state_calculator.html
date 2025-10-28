@@ -1,0 +1,888 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Availability Planner — Steady-State Calculator</title>
+  <style>
+    :root {
+      --bg: #0b1020;
+      --panel: #131a2b;
+      --accent: #5dd6ff;
+      --accent2: #9effa1;
+      --text: #e8f0ff;
+      --muted: #a7b1c7;
+      --danger: #ff6b6b;
+      --warn: #ffd36b;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      height: 100%;
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Inter", system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    .app {
+      height: 100%;
+      display: grid;
+      grid-template-columns: 320px 1fr 360px;
+      grid-template-rows: auto 1fr;
+      gap: 12px;
+      padding: 12px;
+    }
+
+    header {
+      grid-column: 1 / -1;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      border-radius: 12px;
+      background: linear-gradient(180deg, #11182b, #0c1224);
+      border: 1px solid #1b2440;
+    }
+
+    header .title {
+      font-weight: 700;
+      letter-spacing: 0.3px;
+    }
+
+    header .subtitle {
+      color: var(--muted);
+      font-size: 13px;
+      margin-top: 2px;
+    }
+
+    .btns button {
+      margin-left: 8px;
+    }
+
+    aside,
+    main {
+      background: var(--panel);
+      border: 1px solid #1b2440;
+      border-radius: 12px;
+      padding: 14px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .section {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid #1b2440;
+      border-radius: 12px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    h2 {
+      font-size: 16px;
+      margin: 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    label {
+      font-size: 13px;
+      color: var(--muted);
+      display: block;
+      margin-bottom: 4px;
+    }
+
+    input,
+    select,
+    button,
+    textarea {
+      background: #0e1530;
+      color: var(--text);
+      border: 1px solid #2a355e;
+      border-radius: 8px;
+      padding: 8px;
+      font-family: inherit;
+      font-size: 13px;
+    }
+
+    input:focus,
+    select:focus,
+    textarea:focus {
+      outline: 2px solid var(--accent);
+    }
+
+    button {
+      cursor: pointer;
+      font-weight: 600;
+    }
+
+    button.primary {
+      background: linear-gradient(180deg, #193a65, #12294b);
+      border-color: #244c86;
+    }
+
+    button.ghost {
+      background: #0b1227;
+    }
+
+    button.danger {
+      background: #2b0f17;
+      border-color: #61202c;
+      color: #ffd6da;
+    }
+
+    .hint {
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    .component-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-height: 260px;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+
+    .component-card {
+      background: #101730;
+      border: 1px solid #1f2950;
+      border-radius: 10px;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .component-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .component-name {
+      font-weight: 600;
+    }
+
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: #0e1735;
+      border: 1px solid #283463;
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: 12px;
+      color: #b9c6ff;
+    }
+
+    .component-stats {
+      font-size: 12px;
+      color: #c9d6ff;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 4px 12px;
+    }
+
+    .actions {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    main {
+      overflow-y: auto;
+    }
+
+    .stage-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .stage-card {
+      background: #101730;
+      border: 1px solid #1f2950;
+      border-radius: 12px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .stage-head {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 160px auto;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .stage-stats {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 6px 12px;
+      font-size: 12px;
+      color: #c9d6ff;
+    }
+
+    select[multiple] {
+      min-height: 120px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: #0f1838;
+      border: 1px solid #2a355e;
+      border-radius: 999px;
+      padding: 3px 8px;
+      font-size: 11px;
+      color: #9fb2ff;
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 6px 14px;
+      font-size: 14px;
+    }
+
+    .stats-label {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .value {
+      font-variant-numeric: tabular-nums;
+    }
+
+    .status-ok {
+      color: var(--accent2);
+      font-weight: 600;
+    }
+
+    .status-warn {
+      color: var(--warn);
+      font-weight: 600;
+    }
+
+    .scroll {
+      overflow-y: auto;
+    }
+
+    .formula {
+      background: rgba(93, 214, 255, 0.08);
+      border: 1px solid rgba(93, 214, 255, 0.2);
+      border-radius: 10px;
+      padding: 10px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 12px;
+      color: #cfe9ff;
+      white-space: pre-wrap;
+    }
+
+    .pill {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      border: 1px solid #2a355e;
+      background: #0f1838;
+      color: #b7c6ff;
+      font-size: 12px;
+    }
+
+    .empty-hint {
+      font-style: italic;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    @media (max-width: 1200px) {
+      .app {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto;
+        overflow-y: auto;
+        padding: 12px;
+      }
+
+      aside,
+      main {
+        max-height: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <div>
+        <div class="title">📈 Availability Planner — Steady-State Calculator</div>
+        <div class="subtitle">Use MTBF &amp; MTTR inputs to derive component uptime, then combine them in series/parallel stages.</div>
+      </div>
+      <div class="btns">
+        <button id="resetAll" class="danger">Reset All</button>
+      </div>
+    </header>
+
+    <aside class="left">
+      <div class="section">
+        <h2>➕ Add Component</h2>
+        <div>
+          <label for="nameInput">Component Name</label>
+          <input id="nameInput" type="text" placeholder="e.g., Core Router" />
+        </div>
+        <div>
+          <label for="mtbfInput">Mean Time Between Failures (hours)</label>
+          <input id="mtbfInput" type="number" min="0" step="0.01" placeholder="e.g., 1200" />
+        </div>
+        <div>
+          <label for="mttrInput">Mean Time To Repair (hours)</label>
+          <input id="mttrInput" type="number" min="0" step="0.01" placeholder="e.g., 2" />
+        </div>
+        <div class="actions">
+          <button id="saveComponent" class="primary">Add Component</button>
+          <button id="cancelEdit" class="ghost" style="display:none">Cancel</button>
+        </div>
+        <div class="hint">
+          Availability is computed as <span class="pill">A = MTBF / (MTBF + MTTR)</span> per the steady-state formula. MTTR includes
+          corrective repair time only.
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>📦 Components</h2>
+        <div id="componentList" class="component-list"></div>
+        <div id="componentEmpty" class="empty-hint">Add components to start planning your network.</div>
+      </div>
+    </aside>
+
+    <main>
+      <div class="section">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+          <h2>🧮 System Stages</h2>
+          <button id="addStage" class="ghost">Add Stage</button>
+        </div>
+        <div class="hint">
+          Build the network as an ordered set of stages. Each stage can be a <strong>series</strong> chain (all components must be up)
+          or a <strong>parallel</strong> redundant cluster (any component can carry the load). Stage results automatically feed into the
+          system availability computation.
+        </div>
+        <div id="stageList" class="stage-list"></div>
+        <div id="stageEmpty" class="empty-hint">Create your first stage to model the topology.</div>
+      </div>
+
+      <div class="section">
+        <h2>📊 System Availability</h2>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <label for="yearHours" style="margin:0">Hours in Evaluation Window</label>
+          <input id="yearHours" type="number" min="1" step="1" value="8760" style="width:120px" />
+          <span class="badge">Change for 24h/weekly/annual downtime reporting</span>
+        </div>
+        <div class="stats-grid">
+          <div class="stats-label">Steady-State Availability</div>
+          <div id="systemAvailability" class="value">—</div>
+          <div class="stats-label">Unavailability (Q = 1 − A)</div>
+          <div id="systemUnavailability" class="value">—</div>
+          <div class="stats-label">Expected Downtime</div>
+          <div id="systemDowntime" class="value">—</div>
+          <div class="stats-label">Downtime Breakdown</div>
+          <div id="systemDowntimeDetail" class="value">—</div>
+          <div class="stats-label">Status</div>
+          <div id="systemStatus" class="value">—</div>
+        </div>
+      </div>
+    </main>
+
+    <aside class="right">
+      <div class="section">
+        <h2>📐 Key Formulas</h2>
+        <div class="formula">
+A_component = MTBF / (MTBF + MTTR)
+
+Series stage: A_stage = ∏ A_i
+Parallel stage: A_stage = 1 − ∏ (1 − A_i)
+
+Expected downtime (hours) = (1 − A) × window_hours
+        </div>
+        <div class="hint">
+          Steady-state availability reflects the long-run uptime fraction for repairable components under constant failure/repair rates.
+          Series combinations multiply availabilities, while parallel redundancy multiplies unavailabilities. All calculations assume
+          statistically independent components.
+        </div>
+      </div>
+
+      <div class="section scroll" style="flex:1">
+        <h2>🗒️ Notes</h2>
+        <div class="hint">
+          <ul style="margin:0 0 0 18px; padding:0; line-height:1.6">
+            <li>MTBF represents the mean up-time (same as MTTF in many specs). MTTR captures the mean corrective downtime.</li>
+            <li>Availability is mode-agnostic: whether the device is active/standby or load-sharing, treat MTTR as the time until service is restored.</li>
+            <li>For redundancy, only include components that truly provide alternate service paths. Shared infrastructure may break independence.</li>
+            <li>Adjust the evaluation window to translate unavailability into outage minutes per day, week, or year.</li>
+            <li>Pair this tool with reliability (no-repair) analysis when sizing mission success probabilities.</li>
+          </ul>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <script>
+    const componentListEl = document.getElementById('componentList');
+    const componentEmptyEl = document.getElementById('componentEmpty');
+    const stageListEl = document.getElementById('stageList');
+    const stageEmptyEl = document.getElementById('stageEmpty');
+    const nameInput = document.getElementById('nameInput');
+    const mtbfInput = document.getElementById('mtbfInput');
+    const mttrInput = document.getElementById('mttrInput');
+    const saveComponentBtn = document.getElementById('saveComponent');
+    const cancelEditBtn = document.getElementById('cancelEdit');
+    const addStageBtn = document.getElementById('addStage');
+    const resetAllBtn = document.getElementById('resetAll');
+    const yearHoursInput = document.getElementById('yearHours');
+
+    const systemAvailabilityEl = document.getElementById('systemAvailability');
+    const systemUnavailabilityEl = document.getElementById('systemUnavailability');
+    const systemDowntimeEl = document.getElementById('systemDowntime');
+    const systemDowntimeDetailEl = document.getElementById('systemDowntimeDetail');
+    const systemStatusEl = document.getElementById('systemStatus');
+
+    const components = [];
+    const stages = [];
+    let nextComponentId = 1;
+    let nextStageId = 1;
+    let editingComponentId = null;
+
+    function parseFloatOrNull(value) {
+      const num = parseFloat(value);
+      return Number.isFinite(num) ? num : null;
+    }
+
+    function computeAvailability(mtbf, mttr) {
+      const total = mtbf + mttr;
+      if (!Number.isFinite(total) || total <= 0 || mtbf < 0 || mttr < 0) return null;
+      return mtbf / total;
+    }
+
+    function hoursToHuman(hours) {
+      if (!Number.isFinite(hours)) return '—';
+      const days = hours / 24;
+      const minutes = hours * 60;
+      if (hours >= 24) {
+        return `${hours.toFixed(2)} h (~${days.toFixed(2)} d)`;
+      }
+      if (minutes >= 60) {
+        const h = Math.floor(hours);
+        const m = Math.round((hours - h) * 60);
+        return `${h} h ${m} m`;
+      }
+      return `${minutes.toFixed(1)} min`;
+    }
+
+    function formatPct(value) {
+      if (!Number.isFinite(value)) return '—';
+      return `${(value * 100).toFixed(4)}%`;
+    }
+
+    function formatDecimal(value, digits = 6) {
+      if (!Number.isFinite(value)) return '—';
+      return value.toFixed(digits);
+    }
+
+    function resetForm() {
+      nameInput.value = '';
+      mtbfInput.value = '';
+      mttrInput.value = '';
+      editingComponentId = null;
+      saveComponentBtn.textContent = 'Add Component';
+      cancelEditBtn.style.display = 'none';
+    }
+
+    function upsertComponent() {
+      const name = nameInput.value.trim();
+      const mtbf = parseFloatOrNull(mtbfInput.value);
+      const mttr = parseFloatOrNull(mttrInput.value);
+
+      if (!name || mtbf === null || mttr === null || mtbf < 0 || mttr < 0) {
+        alert('Please provide a name, MTBF, and MTTR (all non-negative).');
+        return;
+      }
+
+      const availability = computeAvailability(mtbf, mttr);
+      if (availability === null) {
+        alert('MTBF + MTTR must be greater than 0 to compute availability.');
+        return;
+      }
+
+      if (editingComponentId) {
+        const comp = components.find((c) => c.id === editingComponentId);
+        if (comp) {
+          comp.name = name;
+          comp.mtbf = mtbf;
+          comp.mttr = mttr;
+          comp.availability = availability;
+        }
+      } else {
+        components.push({
+          id: nextComponentId++,
+          name,
+          mtbf,
+          mttr,
+          availability,
+        });
+      }
+
+      resetForm();
+      refreshComponents();
+      refreshStages();
+      computeSystem();
+    }
+
+    function editComponent(id) {
+      const comp = components.find((c) => c.id === id);
+      if (!comp) return;
+      editingComponentId = comp.id;
+      nameInput.value = comp.name;
+      mtbfInput.value = comp.mtbf;
+      mttrInput.value = comp.mttr;
+      saveComponentBtn.textContent = 'Update Component';
+      cancelEditBtn.style.display = 'inline-flex';
+      nameInput.focus();
+    }
+
+    function deleteComponent(id) {
+      const idx = components.findIndex((c) => c.id === id);
+      if (idx === -1) return;
+      components.splice(idx, 1);
+      stages.forEach((stage) => {
+        stage.componentIds = stage.componentIds.filter((compId) => compId !== id);
+      });
+      refreshComponents();
+      refreshStages();
+      computeSystem();
+    }
+
+    function refreshComponents() {
+      componentListEl.innerHTML = '';
+      componentEmptyEl.style.display = components.length ? 'none' : 'block';
+
+      components.forEach((comp) => {
+        const card = document.createElement('div');
+        card.className = 'component-card';
+
+        const header = document.createElement('div');
+        header.className = 'component-header';
+
+        const name = document.createElement('div');
+        name.className = 'component-name';
+        name.textContent = comp.name;
+
+        const chip = document.createElement('span');
+        chip.className = 'chip';
+        chip.innerHTML = `A = ${formatPct(comp.availability)}`;
+
+        header.appendChild(name);
+        header.appendChild(chip);
+        card.appendChild(header);
+
+        const stats = document.createElement('div');
+        stats.className = 'component-stats';
+        stats.innerHTML = `
+          <div>MTBF</div><div>${formatDecimal(comp.mtbf, 3)} h</div>
+          <div>MTTR</div><div>${formatDecimal(comp.mttr, 3)} h</div>
+          <div>Cycle Time</div><div>${formatDecimal(comp.mtbf + comp.mttr, 3)} h</div>
+          <div>Downtime/yr</div><div>${hoursToHuman((1 - comp.availability) * getWindowHours())}</div>
+        `;
+        card.appendChild(stats);
+
+        const actions = document.createElement('div');
+        actions.className = 'actions';
+
+        const editBtn = document.createElement('button');
+        editBtn.className = 'ghost';
+        editBtn.textContent = 'Edit';
+        editBtn.addEventListener('click', () => editComponent(comp.id));
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'danger';
+        deleteBtn.textContent = 'Remove';
+        deleteBtn.addEventListener('click', () => {
+          if (confirm(`Remove ${comp.name}?`)) {
+            deleteComponent(comp.id);
+          }
+        });
+
+        actions.appendChild(editBtn);
+        actions.appendChild(deleteBtn);
+        card.appendChild(actions);
+
+        componentListEl.appendChild(card);
+      });
+    }
+
+    function addStage() {
+      stages.push({
+        id: nextStageId++,
+        name: `Stage ${stages.length + 1}`,
+        type: 'series',
+        componentIds: [],
+      });
+      refreshStages();
+      computeSystem();
+    }
+
+    function deleteStage(id) {
+      const idx = stages.findIndex((s) => s.id === id);
+      if (idx === -1) return;
+      stages.splice(idx, 1);
+      refreshStages();
+      computeSystem();
+    }
+
+    function updateStageName(id, value) {
+      const stage = stages.find((s) => s.id === id);
+      if (!stage) return;
+      stage.name = value || `Stage ${id}`;
+    }
+
+    function updateStageType(id, type) {
+      const stage = stages.find((s) => s.id === id);
+      if (!stage) return;
+      stage.type = type === 'parallel' ? 'parallel' : 'series';
+      computeSystem();
+    }
+
+    function updateStageComponents(id, selectEl) {
+      const stage = stages.find((s) => s.id === id);
+      if (!stage) return;
+      const selected = Array.from(selectEl.selectedOptions).map((opt) => Number(opt.value));
+      stage.componentIds = selected;
+      computeSystem();
+    }
+
+    function refreshStages() {
+      stageListEl.innerHTML = '';
+      stageEmptyEl.style.display = stages.length ? 'none' : 'block';
+
+      stages.forEach((stage) => {
+        const card = document.createElement('div');
+        card.className = 'stage-card';
+
+        const head = document.createElement('div');
+        head.className = 'stage-head';
+
+        const nameInput = document.createElement('input');
+        nameInput.type = 'text';
+        nameInput.value = stage.name;
+        nameInput.placeholder = 'Stage name';
+        nameInput.addEventListener('input', (e) => updateStageName(stage.id, e.target.value));
+
+        const typeSelect = document.createElement('select');
+        typeSelect.innerHTML = `
+          <option value="series">Series (all required)</option>
+          <option value="parallel">Parallel (redundant)</option>
+        `;
+        typeSelect.value = stage.type;
+        typeSelect.addEventListener('change', (e) => updateStageType(stage.id, e.target.value));
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'danger';
+        deleteBtn.textContent = 'Delete';
+        deleteBtn.addEventListener('click', () => {
+          if (confirm(`Delete ${stage.name}?`)) {
+            deleteStage(stage.id);
+          }
+        });
+
+        head.appendChild(nameInput);
+        head.appendChild(typeSelect);
+        head.appendChild(deleteBtn);
+        card.appendChild(head);
+
+        const selectLabel = document.createElement('label');
+        selectLabel.textContent = 'Assign components to this stage';
+        card.appendChild(selectLabel);
+
+        const select = document.createElement('select');
+        select.multiple = true;
+        components.forEach((comp) => {
+          const option = document.createElement('option');
+          option.value = comp.id;
+          option.textContent = `${comp.name} (${formatPct(comp.availability)})`;
+          if (stage.componentIds.includes(comp.id)) {
+            option.selected = true;
+          }
+          select.appendChild(option);
+        });
+        select.addEventListener('change', () => updateStageComponents(stage.id, select));
+        card.appendChild(select);
+
+        const stats = document.createElement('div');
+        stats.className = 'stage-stats';
+        const detail = computeStageAvailability(stage);
+        stats.innerHTML = `
+          <div>Availability</div><div>${formatPct(detail.availability)}</div>
+          <div>Unavailability</div><div>${formatPct(detail.unavailability)}</div>
+          <div>Downtime (${getWindowHours()} h)</div><div>${hoursToHuman(detail.downtimeHours)}</div>
+          <div>Components</div><div>${detail.labels || '—'}</div>
+        `;
+        card.appendChild(stats);
+
+        stageListEl.appendChild(card);
+      });
+    }
+
+    function computeStageAvailability(stage) {
+      const comps = stage.componentIds
+        .map((id) => components.find((c) => c.id === id))
+        .filter(Boolean);
+      const windowHours = getWindowHours();
+
+      if (!comps.length) {
+        return {
+          availability: 1,
+          unavailability: 0,
+          downtimeHours: 0,
+          labels: 'None selected',
+        };
+      }
+
+      const values = comps.map((c) => c.availability).filter((v) => Number.isFinite(v));
+      if (!values.length) {
+        return {
+          availability: NaN,
+          unavailability: NaN,
+          downtimeHours: NaN,
+          labels: comps.map((c) => c.name).join(', '),
+        };
+      }
+
+      let availability = 1;
+      if (stage.type === 'parallel') {
+        let product = 1;
+        values.forEach((v) => {
+          product *= 1 - v;
+        });
+        availability = 1 - product;
+      } else {
+        values.forEach((v) => {
+          availability *= v;
+        });
+      }
+
+      const unavailability = 1 - availability;
+      const downtimeHours = unavailability * windowHours;
+
+      return {
+        availability,
+        unavailability,
+        downtimeHours,
+        labels: comps.map((c) => c.name).join(', '),
+      };
+    }
+
+    function computeSystem() {
+      const windowHours = getWindowHours();
+      if (!stages.length) {
+        systemAvailabilityEl.textContent = '—';
+        systemUnavailabilityEl.textContent = '—';
+        systemDowntimeEl.textContent = '—';
+        systemDowntimeDetailEl.textContent = 'Add stages to compute results.';
+        systemStatusEl.textContent = 'Waiting for topology…';
+        systemStatusEl.className = 'value';
+        return;
+      }
+
+      let systemAvailability = 1;
+      const stageDetails = stages.map((stage) => computeStageAvailability(stage));
+
+      if (stageDetails.some((d) => !Number.isFinite(d.availability))) {
+        systemAvailabilityEl.textContent = '—';
+        systemUnavailabilityEl.textContent = '—';
+        systemDowntimeEl.textContent = '—';
+        systemDowntimeDetailEl.textContent = 'Some stages are missing valid availability values.';
+        systemStatusEl.textContent = 'Cannot evaluate';
+        systemStatusEl.className = 'value status-warn';
+        return;
+      }
+
+      stageDetails.forEach((detail) => {
+        systemAvailability *= detail.availability;
+      });
+
+      const systemUnavailability = 1 - systemAvailability;
+      const downtimeHours = systemUnavailability * windowHours;
+
+      systemAvailabilityEl.textContent = formatPct(systemAvailability);
+      systemUnavailabilityEl.textContent = formatPct(systemUnavailability);
+      systemDowntimeEl.textContent = `${downtimeHours.toFixed(3)} h`;
+      systemDowntimeDetailEl.textContent = hoursToHuman(downtimeHours);
+
+      const statusClass = systemAvailability >= 0.999 ? 'status-ok' : systemAvailability >= 0.99 ? 'status-warn' : '';
+      systemStatusEl.textContent = systemAvailability >= 0.999 ? 'Excellent (four nines+)' : systemAvailability >= 0.99 ? 'Acceptable (three nines)' : 'Needs attention';
+      systemStatusEl.className = `value ${statusClass}`.trim();
+
+      refreshStages();
+    }
+
+    function getWindowHours() {
+      const hours = parseFloat(yearHoursInput.value);
+      return Number.isFinite(hours) && hours > 0 ? hours : 8760;
+    }
+
+    function resetAll() {
+      if (!confirm('Clear all components and stages?')) return;
+      components.splice(0, components.length);
+      stages.splice(0, stages.length);
+      nextComponentId = 1;
+      nextStageId = 1;
+      resetForm();
+      refreshComponents();
+      refreshStages();
+      computeSystem();
+    }
+
+    function seedData() {
+      components.push(
+        { id: nextComponentId++, name: 'Edge Router A', mtbf: 1400, mttr: 2, availability: computeAvailability(1400, 2) },
+        { id: nextComponentId++, name: 'Edge Router B', mtbf: 1400, mttr: 2, availability: computeAvailability(1400, 2) },
+        { id: nextComponentId++, name: 'Core Switch', mtbf: 900, mttr: 4, availability: computeAvailability(900, 4) },
+        { id: nextComponentId++, name: 'Firewall Cluster', mtbf: 1100, mttr: 3, availability: computeAvailability(1100, 3) },
+      );
+
+      stages.push(
+        { id: nextStageId++, name: 'Dual Edge Routers', type: 'parallel', componentIds: [1, 2] },
+        { id: nextStageId++, name: 'Core Switching', type: 'series', componentIds: [3] },
+        { id: nextStageId++, name: 'Security Tier', type: 'series', componentIds: [4] },
+      );
+    }
+
+    saveComponentBtn.addEventListener('click', upsertComponent);
+    cancelEditBtn.addEventListener('click', resetForm);
+    addStageBtn.addEventListener('click', addStage);
+    resetAllBtn.addEventListener('click', resetAll);
+    yearHoursInput.addEventListener('input', () => {
+      computeSystem();
+      refreshComponents();
+      refreshStages();
+    });
+
+    seedData();
+    refreshComponents();
+    refreshStages();
+    computeSystem();
+  </script>
+</body>
+</html>
