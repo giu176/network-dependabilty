@@ -1318,14 +1318,13 @@ Expected downtime (hours) = (1 − A) × window_hours
       const byDepth = new Map();
       relevantIds.forEach((id) => {
         if (!depth.has(id)) return;
+        const node = nodeById.get(id);
+        if (!node || node.type === 'terminal') return;
         const layer = depth.get(id) ?? 0;
         if (!byDepth.has(layer)) {
           byDepth.set(layer, []);
         }
-        const node = nodeById.get(id);
-        if (node) {
-          byDepth.get(layer).push(node);
-        }
+        byDepth.get(layer).push(node);
       });
 
       const orderedDepths = Array.from(byDepth.keys()).sort((a, b) => a - b);
