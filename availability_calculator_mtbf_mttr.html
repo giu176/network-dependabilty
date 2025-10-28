@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Availability Calculator — MTBF/MTTR Explorer</title>
+  <style>
+    :root {
+      --bg: #0b1020;
+      --panel: #131a2b;
+      --accent: #5dd6ff;
+      --accent2: #9effa1;
+      --text: #e8f0ff;
+      --muted: #a7b1c7;
+      --danger: #ff6b6b;
+    }
+    * {
+      box-sizing: border-box;
+    }
+    html, body {
+      height: 100%;
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Inter", system-ui, -apple-system, "Segoe UI", "Roboto", sans-serif;
+    }
+    .app {
+      display: grid;
+      grid-template-columns: 340px minmax(320px, 1fr) 360px;
+      grid-template-rows: auto 1fr;
+      gap: 12px;
+      height: 100%;
+      padding: 12px;
+    }
+    header {
+      grid-column: 1 / -1;
+      background: linear-gradient(180deg,#11182b,#0c1224);
+      border: 1px solid #1b2440;
+      border-radius: 14px;
+      padding: 12px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    header .title {
+      font-weight: 700;
+      letter-spacing: 0.2px;
+    }
+    header .sub {
+      color: var(--muted);
+      font-size: 13px;
+      margin-top: 4px;
+    }
+    header .meta {
+      display: flex;
+      gap: 12px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .panel {
+      background: var(--panel);
+      border: 1px solid #1b2440;
+      border-radius: 14px;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      overflow: hidden;
+    }
+    h2 {
+      margin: 0;
+      font-size: 17px;
+      letter-spacing: 0.2px;
+    }
+    .section {
+      background: rgba(255,255,255,0.035);
+      border: 1px solid #1b2440;
+      border-radius: 12px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    label {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    input, select {
+      background: #0e1530;
+      color: var(--text);
+      border: 1px solid #2a355e;
+      border-radius: 10px;
+      padding: 8px;
+      font-size: 14px;
+    }
+    input[type="number"]::-webkit-outer-spin-button,
+    input[type="number"]::-webkit-inner-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+    input[type="number"] {
+      appearance: textfield;
+    }
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .result-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit,minmax(180px,1fr));
+      gap: 12px;
+    }
+    .card {
+      background: rgba(15,23,56,0.9);
+      border: 1px solid #253260;
+      border-radius: 12px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .card .label {
+      font-size: 12px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.7px;
+    }
+    .card .value {
+      font-size: 22px;
+      font-weight: 600;
+      color: var(--accent);
+    }
+    .card .hint {
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .chart-wrapper {
+      position: relative;
+      background: radial-gradient(1200px 800px at 40% 30%,#0e1530 0%,#0b1020 60%);
+      border: 1px solid #1b2440;
+      border-radius: 12px;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
+    canvas {
+      width: 100%;
+      height: 100%;
+      flex: 1;
+    }
+    .chart-legend {
+      display: flex;
+      gap: 12px;
+      padding: 10px 14px 14px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      margin-right: 6px;
+      display: inline-block;
+    }
+    .explain {
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+    .highlight {
+      color: var(--accent2);
+      font-weight: 600;
+    }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: #0e1735;
+      border-radius: 999px;
+      padding: 4px 10px;
+      border: 1px solid #2a355e;
+      font-size: 12px;
+      color: #b9c6ff;
+    }
+    .muted {
+      color: var(--muted);
+    }
+    .list {
+      display: grid;
+      gap: 10px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .list strong {
+      color: var(--text);
+    }
+    .kbd {
+      padding: 2px 6px;
+      border-radius: 6px;
+      border: 1px solid #2a355e;
+      background: #0a142e;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size: 12px;
+      color: #b9c6ff;
+    }
+    footer {
+      font-size: 11px;
+      color: var(--muted);
+      padding-top: 8px;
+      border-top: 1px solid #1b2440;
+    }
+    @media (max-width: 1200px) {
+      .app {
+        grid-template-columns: minmax(280px,1fr);
+        grid-template-rows: auto auto auto 1fr;
+        height: auto;
+      }
+      header {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+      }
+      .panel.right {
+        order: 3;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <div>
+        <div class="title">📈 Availability Calculator — MTBF/MTTR Explorer</div>
+        <div class="sub">Turn mean-time metrics into real uptime, downtime, and mission risk insights.</div>
+      </div>
+      <div class="meta">
+        <span class="pill">Formula: A = MTBF / (MTBF + MTTR)</span>
+        <span>Start typing — results update instantly.</span>
+      </div>
+    </header>
+
+    <aside class="panel left">
+      <h2>Input Parameters</h2>
+      <div class="section">
+        <div class="pill">Component Steady-State Model</div>
+        <label>
+          Mean Time Between Failures (MTBF)
+          <div class="two-col">
+            <input type="number" id="mtbf" min="0.0001" step="0.01" value="200" />
+            <select id="mtbfUnit">
+              <option value="hours">hours</option>
+              <option value="days">days</option>
+              <option value="weeks">weeks</option>
+              <option value="months">months</option>
+              <option value="years">years</option>
+            </select>
+          </div>
+        </label>
+        <label>
+          Mean Time To Repair (MTTR)
+          <div class="two-col">
+            <input type="number" id="mttr" min="0.0001" step="0.01" value="8" />
+            <select id="mttrUnit">
+              <option value="hours">hours</option>
+              <option value="minutes">minutes</option>
+              <option value="days">days</option>
+            </select>
+          </div>
+        </label>
+        <div class="explain">
+          <span class="highlight">MTBF</span> describes the long-run operating stretch before a failure, while
+          <span class="highlight">MTTR</span> is the average repair window. Together they define how much of the time the asset is up.
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="pill">Mission / Reporting Window</div>
+        <label>
+          Mission Time Horizon
+          <div class="two-col">
+            <input type="number" id="mission" min="0.01" step="0.01" value="24" />
+            <select id="missionUnit">
+              <option value="hours">hours</option>
+              <option value="days">days</option>
+              <option value="weeks">weeks</option>
+              <option value="months">months</option>
+              <option value="years">years</option>
+            </select>
+          </div>
+        </label>
+        <label>
+          Downtime Reporting Window
+          <div class="two-col">
+            <select id="windowSize">
+              <option value="day">Day</option>
+              <option value="week">Week</option>
+              <option value="month" selected>Month</option>
+              <option value="quarter">Quarter</option>
+              <option value="year">Year</option>
+            </select>
+            <select id="windowUnit">
+              <option value="hours">Hours</option>
+              <option value="minutes" selected>Minutes</option>
+              <option value="seconds">Seconds</option>
+            </select>
+          </div>
+        </label>
+        <div class="explain">
+          Use these controls to see reliability over a specific mission time and translate steady-state availability into
+          tangible downtime for your preferred reporting cadence.
+        </div>
+      </div>
+
+      <footer>
+        Tip: press <span class="kbd">R</span> to reset to defaults or <span class="kbd">E</span> to export a JSON snapshot of the current scenario.
+      </footer>
+    </aside>
+
+    <section class="panel middle">
+      <h2>Availability Snapshot</h2>
+      <div class="result-grid" id="summaryCards"></div>
+      <div class="chart-wrapper">
+        <canvas id="availabilityChart" width="600" height="300"></canvas>
+        <div class="chart-legend">
+          <span><span class="dot" style="background:var(--accent)"></span>Point Availability A(t)</span>
+          <span><span class="dot" style="background:var(--accent2)"></span>Steady-State Limit</span>
+          <span class="muted">Assumes exponential failure/repair process starting available at t=0.</span>
+        </div>
+      </div>
+    </section>
+
+    <aside class="panel right">
+      <h2>Derived Metrics</h2>
+      <div class="section" id="metricsList"></div>
+      <div class="section">
+        <div class="pill">Interpretation</div>
+        <div class="list" id="insights"></div>
+      </div>
+    </aside>
+  </div>
+
+  <script>
+    const $ = (sel) => document.querySelector(sel);
+
+    const inputs = {
+      mtbf: $('#mtbf'),
+      mtbfUnit: $('#mtbfUnit'),
+      mttr: $('#mttr'),
+      mttrUnit: $('#mttrUnit'),
+      mission: $('#mission'),
+      missionUnit: $('#missionUnit'),
+      windowSize: $('#windowSize'),
+      windowUnit: $('#windowUnit'),
+    };
+
+    const summaryCards = $('#summaryCards');
+    const metricsList = $('#metricsList');
+    const insights = $('#insights');
+    const canvas = $('#availabilityChart');
+    const ctx = canvas.getContext('2d');
+
+    function toHours(value, unit) {
+      const v = Number(value);
+      if (!Number.isFinite(v) || v <= 0) return NaN;
+      switch (unit) {
+        case 'minutes': return v / 60;
+        case 'seconds': return v / 3600;
+        case 'hours': return v;
+        case 'days': return v * 24;
+        case 'weeks': return v * 24 * 7;
+        case 'months': return v * 24 * 30;
+        case 'quarter': return v * 24 * 90;
+        case 'year':
+        case 'years': return v * 24 * 365;
+        default: return NaN;
+      }
+    }
+
+    function formatPercent(x) {
+      if (!Number.isFinite(x)) return '—';
+      return (x * 100).toFixed(x > 0.999 ? 6 : 3) + '%';
+    }
+
+    function formatHours(hours, unit) {
+      if (!Number.isFinite(hours)) return '—';
+      switch (unit) {
+        case 'hours':
+          return hours < 1 ? (hours * 60).toFixed(2) + ' min' : hours.toFixed(2) + ' h';
+        case 'minutes':
+          return (hours * 60).toFixed(2) + ' min';
+        case 'seconds':
+          return (hours * 3600).toFixed(0) + ' s';
+        default:
+          return hours.toFixed(3) + ' h';
+      }
+    }
+
+    function calcNines(avail) {
+      if (avail >= 1) return '∞ nines';
+      const nines = -Math.log10(1 - avail);
+      if (!Number.isFinite(nines) || nines < 0) return '—';
+      return nines.toFixed(2) + ' nines';
+    }
+
+    function pointAvailability(lambda, mu, t) {
+      const denom = lambda + mu;
+      if (denom === 0) return 1;
+      const steady = mu / denom;
+      const transient = (lambda / denom) * Math.exp(-denom * t);
+      return steady + transient;
+    }
+
+    function compute() {
+      const mtbfHours = toHours(inputs.mtbf.value, inputs.mtbfUnit.value);
+      const mttrHours = toHours(inputs.mttr.value, inputs.mttrUnit.value);
+      const missionHours = toHours(inputs.mission.value, inputs.missionUnit.value);
+
+      if (![mtbfHours, mttrHours, missionHours].every(Number.isFinite)) {
+        summaryCards.innerHTML = '<div class="card"><div class="label">Status</div><div class="value" style="color:var(--danger)">Check Inputs</div><div class="hint">All numeric entries must be greater than zero.</div></div>';
+        metricsList.innerHTML = '';
+        insights.innerHTML = '';
+        ctx.clearRect(0,0,canvas.width, canvas.height);
+        return;
+      }
+
+      const lambda = 1 / mtbfHours;
+      const mu = 1 / mttrHours;
+      const steady = mtbfHours / (mtbfHours + mttrHours);
+      const unavailability = 1 - steady;
+      const failureIntensity = lambda * 8760; // per year
+      const downtimeWindowHours = (() => {
+        switch (inputs.windowSize.value) {
+          case 'day': return 24;
+          case 'week': return 24 * 7;
+          case 'month': return 24 * 30;
+          case 'quarter': return 24 * 90;
+          case 'year': return 24 * 365;
+          default: return 24 * 30;
+        }
+      })();
+
+      const downtimeWindow = unavailability * downtimeWindowHours;
+      const reliabilityMission = Math.exp(-missionHours / mtbfHours);
+      const missionAvailability = pointAvailability(lambda, mu, missionHours);
+      const cyclesPerYear = 1 / (mtbfHours + mttrHours) * 8760;
+
+      const summary = [
+        {
+          label: 'Steady-State Availability',
+          value: formatPercent(steady),
+          hint: calcNines(steady),
+        },
+        {
+          label: inputs.windowSize.value.charAt(0).toUpperCase() + inputs.windowSize.value.slice(1) + ' Downtime',
+          value: formatHours(downtimeWindow, inputs.windowUnit.value),
+          hint: inputs.windowUnit.value === 'seconds'
+            ? (downtimeWindow * 3600).toLocaleString() + ' seconds each ' + inputs.windowSize.value
+            : inputs.windowUnit.value === 'minutes'
+              ? (downtimeWindow * 60).toFixed(1) + ' minutes ≈ ' + (downtimeWindow / 24).toFixed(3) + ' days'
+              : downtimeWindow.toFixed(2) + ' hours',
+        },
+        {
+          label: 'Mission Reliability R(t)',
+          value: formatPercent(reliabilityMission),
+          hint: `Probability of no failure for ${inputs.mission.value} ${inputs.missionUnit.value}`,
+        },
+        {
+          label: 'Mission Availability A(t)',
+          value: formatPercent(missionAvailability),
+          hint: 'Point availability using exponential failure/repair dynamics',
+        }
+      ];
+
+      summaryCards.innerHTML = summary.map(card => `
+        <div class="card">
+          <div class="label">${card.label}</div>
+          <div class="value">${card.value}</div>
+          <div class="hint">${card.hint}</div>
+        </div>
+      `).join('');
+
+      const details = [
+        { name: 'Failure Rate λ', value: `${(lambda).toExponential(6)} per hour` },
+        { name: 'Repair Rate μ', value: `${(mu).toExponential(6)} per hour` },
+        { name: 'Cycle Frequency', value: `${cyclesPerYear.toFixed(2)} repairs per year` },
+        { name: 'Unavailability Q', value: formatPercent(unavailability) },
+        { name: 'Downtime / Year', value: formatHours(unavailability * 8760, inputs.windowUnit.value) },
+        { name: 'Downtime / Month', value: formatHours(unavailability * 24 * 30, inputs.windowUnit.value) },
+        { name: 'Mean Up Interval', value: `${mtbfHours.toFixed(2)} h (${(mtbfHours/24).toFixed(2)} days)` },
+        { name: 'Mean Repair Interval', value: `${mttrHours.toFixed(2)} h (${(mttrHours*60).toFixed(1)} min)` },
+      ];
+
+      metricsList.innerHTML = details.map(item => `
+        <div><strong>${item.name}:</strong> ${item.value}</div>
+      `).join('');
+
+      const downtimeSeconds = unavailability * downtimeWindowHours * 3600;
+      const insightText = [
+        `At steady state the asset spends <strong>${formatPercent(unavailability)}</strong> of the time unavailable, translating to <strong>${formatHours(unavailability * 8760, 'hours')}</strong> per year.`,
+        `For a mission lasting <strong>${inputs.mission.value} ${inputs.missionUnit.value}</strong>, the chance of zero failures is <strong>${formatPercent(reliabilityMission)}</strong>.`,
+        `Even if a failure occurs mid-mission, repair dynamics keep point availability at <strong>${formatPercent(missionAvailability)}</strong>.`,
+        `Downtime for each ${inputs.windowSize.value} is roughly <strong>${formatHours(downtimeWindow, inputs.windowUnit.value)}</strong> (${downtimeSeconds.toFixed(0)} seconds).`
+      ];
+
+      insights.innerHTML = insightText.map(line => `<div>${line}</div>`).join('');
+
+      drawChart(lambda, mu, missionHours, steady);
+    }
+
+    function drawChart(lambda, mu, missionHours, steady) {
+      const w = canvas.width;
+      const h = canvas.height;
+      ctx.clearRect(0, 0, w, h);
+
+      const duration = Math.max(missionHours, 1);
+      const samples = 120;
+      const denom = lambda + mu;
+      const maxTime = Math.max(missionHours, (10 / (denom || 1)) || missionHours);
+
+      const points = new Array(samples).fill(0).map((_, i) => {
+        const t = (i / (samples - 1)) * maxTime;
+        const y = pointAvailability(lambda, mu, t);
+        return { t, y };
+      });
+
+      const pad = { left: 50, right: 20, top: 20, bottom: 40 };
+      ctx.save();
+      ctx.translate(pad.left, pad.top);
+      const innerW = w - pad.left - pad.right;
+      const innerH = h - pad.top - pad.bottom;
+
+      ctx.fillStyle = 'rgba(255,255,255,0.04)';
+      ctx.fillRect(0, 0, innerW, innerH);
+
+      ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      for (let i = 0; i <= 4; i++) {
+        const y = (innerH / 4) * i;
+        ctx.moveTo(0, y);
+        ctx.lineTo(innerW, y);
+      }
+      ctx.stroke();
+
+      ctx.fillStyle = 'rgba(255,255,255,0.4)';
+      ctx.font = '12px Inter, system-ui';
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'middle';
+      for (let i = 0; i <= 4; i++) {
+        const frac = 1 - (i / 4);
+        const y = (innerH / 4) * i;
+        ctx.fillText((frac * 100).toFixed(0) + '%', -8, y);
+      }
+
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      const ticks = 6;
+      for (let i = 0; i <= ticks; i++) {
+        const frac = i / ticks;
+        const x = frac * innerW;
+        const t = frac * maxTime;
+        ctx.fillText(t.toFixed(t >= 10 ? 0 : 1) + ' h', x, innerH + 10);
+      }
+
+      ctx.strokeStyle = 'rgba(158,255,161,0.5)';
+      ctx.lineWidth = 1.5;
+      const steadyY = innerH * (1 - steady);
+      ctx.beginPath();
+      ctx.moveTo(0, steadyY);
+      ctx.lineTo(innerW, steadyY);
+      ctx.stroke();
+
+      ctx.strokeStyle = 'rgba(93,214,255,0.9)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      points.forEach((p, idx) => {
+        const x = (p.t / maxTime) * innerW;
+        const y = innerH * (1 - p.y);
+        if (idx === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+
+      if (missionHours > 0) {
+        const xMission = (Math.min(missionHours, maxTime) / maxTime) * innerW;
+        const yMission = innerH * (1 - pointAvailability(lambda, mu, missionHours));
+        ctx.fillStyle = 'var(--accent2)';
+        ctx.beginPath();
+        ctx.arc(xMission, yMission, 4, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      ctx.restore();
+    }
+
+    Object.values(inputs).forEach((el) => {
+      el.addEventListener('input', compute);
+      el.addEventListener('change', compute);
+    });
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key.toLowerCase() === 'r') {
+        inputs.mtbf.value = 200;
+        inputs.mtbfUnit.value = 'hours';
+        inputs.mttr.value = 8;
+        inputs.mttrUnit.value = 'hours';
+        inputs.mission.value = 24;
+        inputs.missionUnit.value = 'hours';
+        inputs.windowSize.value = 'month';
+        inputs.windowUnit.value = 'minutes';
+        compute();
+      }
+      if (event.key.toLowerCase() === 'e') {
+        const payload = {
+          mtbf: Number(inputs.mtbf.value),
+          mtbfUnit: inputs.mtbfUnit.value,
+          mttr: Number(inputs.mttr.value),
+          mttrUnit: inputs.mttrUnit.value,
+          mission: Number(inputs.mission.value),
+          missionUnit: inputs.missionUnit.value,
+          windowSize: inputs.windowSize.value,
+          windowUnit: inputs.windowUnit.value,
+        };
+        navigator.clipboard?.writeText(JSON.stringify(payload, null, 2));
+        const original = document.title;
+        document.title = '✅ Scenario copied to clipboard';
+        setTimeout(() => (document.title = original), 800);
+      }
+    });
+
+    compute();
+  </script>
+</body>
+</html>
