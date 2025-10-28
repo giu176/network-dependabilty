@@ -86,6 +86,116 @@
       gap: 10px;
     }
 
+    .graph-head {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .graph-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .graph-toolbar button.active {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .graph-toolbar select {
+      min-width: 180px;
+    }
+
+    .graph-canvas-wrapper {
+      position: relative;
+      border: 1px dashed #23305a;
+      border-radius: 12px;
+      background: #0d142a;
+      overflow: hidden;
+    }
+
+    svg#graphCanvas {
+      width: 100%;
+      height: 320px;
+      display: block;
+    }
+
+    .graph-edge {
+      stroke: #3a4f8a;
+      stroke-width: 2;
+      marker-end: url(#arrowhead);
+    }
+
+    .graph-node circle,
+    .graph-node rect {
+      fill: #16224a;
+      stroke: #2f4da0;
+      stroke-width: 2;
+    }
+
+    .graph-node.merge circle {
+      fill: #1b274e;
+      stroke: #45c0ff;
+    }
+
+    .graph-node text {
+      fill: var(--text);
+      font-size: 12px;
+      text-anchor: middle;
+      dominant-baseline: middle;
+      pointer-events: none;
+    }
+
+    .graph-node.pending circle {
+      stroke: var(--accent2);
+      stroke-width: 3;
+    }
+
+    .graph-node:hover circle {
+      stroke: var(--accent);
+    }
+
+    .graph-meta {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 10px;
+    }
+
+    .graph-meta .graph-list {
+      background: #101a36;
+      border: 1px solid #1f2d54;
+      border-radius: 10px;
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      max-height: 150px;
+      overflow-y: auto;
+    }
+
+    .graph-meta h3 {
+      margin: 0;
+      font-size: 13px;
+      color: var(--muted);
+      font-weight: 600;
+    }
+
+    .graph-meta .item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+    }
+
+    .graph-meta .item span {
+      flex: 1;
+    }
+
     h2 {
       font-size: 16px;
       margin: 0;
@@ -385,6 +495,39 @@
       </div>
 
       <div class="section">
+        <div class="graph-head">
+          <h2>🗺️ Availability Graph</h2>
+          <div class="graph-toolbar">
+            <select id="graphComponentSelect">
+              <option value="">Select component…</option>
+            </select>
+            <button id="graphAddNode" class="ghost">Add Node</button>
+            <button id="graphAddEdge" class="ghost">Add Edge</button>
+            <button id="graphAddMerge" class="ghost">Add Merge Dot</button>
+            <button id="graphCancel" class="ghost">Cancel</button>
+          </div>
+        </div>
+        <div class="hint">
+          Use the availability graph to express stage and redundancy relationships visually. Node positions are draggable; edges
+          determine ordering, and merge dots behave as always-on connectors.
+        </div>
+        <div class="graph-canvas-wrapper">
+          <svg id="graphCanvas" viewBox="0 0 800 400" preserveAspectRatio="xMidYMid meet"></svg>
+        </div>
+        <div id="graphEmpty" class="empty-hint">Add nodes to visualize the topology.</div>
+        <div class="graph-meta">
+          <div>
+            <h3>Nodes</h3>
+            <div id="graphNodeList" class="graph-list"></div>
+          </div>
+          <div>
+            <h3>Edges</h3>
+            <div id="graphEdgeList" class="graph-list"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
         <h2>📊 System Availability</h2>
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
           <label for="yearHours" style="margin:0">Hours in Evaluation Window</label>
@@ -459,11 +602,31 @@ Expected downtime (hours) = (1 − A) × window_hours
     const systemDowntimeDetailEl = document.getElementById('systemDowntimeDetail');
     const systemStatusEl = document.getElementById('systemStatus');
 
+    const graphCanvas = document.getElementById('graphCanvas');
+    const graphComponentSelect = document.getElementById('graphComponentSelect');
+    const graphAddNodeBtn = document.getElementById('graphAddNode');
+    const graphAddEdgeBtn = document.getElementById('graphAddEdge');
+    const graphAddMergeBtn = document.getElementById('graphAddMerge');
+    const graphCancelBtn = document.getElementById('graphCancel');
+    const graphEmptyEl = document.getElementById('graphEmpty');
+    const graphNodeListEl = document.getElementById('graphNodeList');
+    const graphEdgeListEl = document.getElementById('graphEdgeList');
+
     const components = [];
     const stages = [];
+    const graphNodes = [];
+    const graphEdges = [];
     let nextComponentId = 1;
     let nextStageId = 1;
+    let nextGraphNodeId = 1;
+    let nextGraphEdgeId = 1;
     let editingComponentId = null;
+    let graphMode = null;
+    let pendingEdgeStartId = null;
+    let dragNodeId = null;
+    let dragOffset = { x: 0, y: 0 };
+    let mergeDotCount = 1;
+    let derivedGraphStages = [];
 
     function parseFloatOrNull(value) {
       const num = parseFloat(value);
@@ -500,6 +663,479 @@ Expected downtime (hours) = (1 − A) × window_hours
       if (!Number.isFinite(value)) return '—';
       return value.toFixed(digits);
     }
+
+    function setGraphMode(mode) {
+      graphMode = mode;
+      if (mode !== 'add-edge') {
+        pendingEdgeStartId = null;
+      }
+      refreshGraphModeButtons();
+    }
+
+    function refreshGraphModeButtons() {
+      const buttons = [
+        { btn: graphAddNodeBtn, mode: 'add-node' },
+        { btn: graphAddEdgeBtn, mode: 'add-edge' },
+        { btn: graphAddMergeBtn, mode: 'add-merge' },
+      ];
+      buttons.forEach(({ btn, mode }) => {
+        if (!btn) return;
+        btn.classList.toggle('active', graphMode === mode);
+      });
+      if (graphCancelBtn) {
+        graphCancelBtn.classList.toggle('active', Boolean(graphMode) || pendingEdgeStartId !== null);
+      }
+    }
+
+    function getSVGCoordinates(evt) {
+      const rect = graphCanvas.getBoundingClientRect();
+      const scaleX = 800 / rect.width;
+      const scaleY = 400 / rect.height;
+      return {
+        x: (evt.clientX - rect.left) * scaleX,
+        y: (evt.clientY - rect.top) * scaleY,
+      };
+    }
+
+    function getComponentById(id) {
+      return components.find((c) => c.id === id) || null;
+    }
+
+    function getGraphNodeLabel(node) {
+      if (node.type === 'merge') return node.label;
+      const comp = getComponentById(node.componentId);
+      return comp ? comp.name : 'Unknown';
+    }
+
+    function getGraphNodeAvailability(node) {
+      if (node.type === 'merge') return 1;
+      const comp = getComponentById(node.componentId);
+      return comp ? comp.availability : null;
+    }
+
+    function refreshGraphComponentSelect() {
+      if (!graphComponentSelect) return;
+      const previous = graphComponentSelect.value;
+      graphComponentSelect.innerHTML = '<option value="">Select component…</option>';
+      components.forEach((comp) => {
+        const option = document.createElement('option');
+        option.value = String(comp.id);
+        option.textContent = `${comp.name} (${formatPct(comp.availability)})`;
+        if (previous && previous === option.value) {
+          option.selected = true;
+        }
+        graphComponentSelect.appendChild(option);
+      });
+      if (graphAddNodeBtn) {
+        graphAddNodeBtn.disabled = !components.length;
+      }
+      if (!components.length && graphMode === 'add-node') {
+        setGraphMode(null);
+      }
+    }
+
+    function addGraphNodeFromComponent(componentId, x, y) {
+      const comp = getComponentById(componentId);
+      if (!comp) {
+        alert('Select a valid component before placing a node.');
+        return null;
+      }
+      const node = {
+        id: nextGraphNodeId++,
+        type: 'component',
+        componentId: comp.id,
+        x,
+        y,
+      };
+      graphNodes.push(node);
+      return node;
+    }
+
+    function addMergeDotNode(x, y) {
+      const node = {
+        id: nextGraphNodeId++,
+        type: 'merge',
+        label: `Merge ${mergeDotCount++}`,
+        x,
+        y,
+      };
+      graphNodes.push(node);
+      return node;
+    }
+
+    function removeGraphNodeInternal(id) {
+      const idx = graphNodes.findIndex((n) => n.id === id);
+      if (idx === -1) return;
+      graphNodes.splice(idx, 1);
+      for (let i = graphEdges.length - 1; i >= 0; i -= 1) {
+        if (graphEdges[i].from === id || graphEdges[i].to === id) {
+          graphEdges.splice(i, 1);
+        }
+      }
+      if (pendingEdgeStartId === id) {
+        pendingEdgeStartId = null;
+      }
+    }
+
+    function deleteGraphNode(id) {
+      removeGraphNodeInternal(id);
+      refreshGraph();
+      computeSystem();
+    }
+
+    function deleteGraphEdge(id) {
+      const idx = graphEdges.findIndex((e) => e.id === id);
+      if (idx === -1) return;
+      graphEdges.splice(idx, 1);
+      refreshGraph();
+      computeSystem();
+    }
+
+    function handleCanvasClick(evt) {
+      if (evt.target !== graphCanvas) return;
+      if (!graphMode) return;
+      const coords = getSVGCoordinates(evt);
+      if (graphMode === 'add-node') {
+        const selected = graphComponentSelect.value;
+        if (!selected) {
+          alert('Choose a component before adding a node.');
+          return;
+        }
+        addGraphNodeFromComponent(Number(selected), coords.x, coords.y);
+        refreshGraph();
+        computeSystem();
+        return;
+      }
+      if (graphMode === 'add-merge') {
+        addMergeDotNode(coords.x, coords.y);
+        refreshGraph();
+        computeSystem();
+      }
+    }
+
+    function handleEdgeSelection(node) {
+      if (graphMode !== 'add-edge') return;
+      if (pendingEdgeStartId === node.id) {
+        pendingEdgeStartId = null;
+        refreshGraph();
+        return;
+      }
+      if (pendingEdgeStartId === null) {
+        pendingEdgeStartId = node.id;
+        refreshGraph();
+        return;
+      }
+      if (pendingEdgeStartId !== node.id) {
+        const start = graphNodes.find((n) => n.id === pendingEdgeStartId);
+        if (!start) {
+          pendingEdgeStartId = null;
+          refreshGraph();
+          return;
+        }
+        const exists = graphEdges.some((e) => e.from === start.id && e.to === node.id);
+        if (exists) {
+          alert('Edge already exists.');
+          pendingEdgeStartId = null;
+          refreshGraph();
+          return;
+        }
+        graphEdges.push({ id: nextGraphEdgeId++, from: start.id, to: node.id });
+        pendingEdgeStartId = null;
+        refreshGraph();
+        computeSystem();
+      }
+    }
+
+    function startNodeDrag(node, evt) {
+      if (graphMode === 'add-edge') {
+        evt.stopPropagation();
+        return;
+      }
+      evt.preventDefault();
+      dragNodeId = node.id;
+      const coords = getSVGCoordinates(evt);
+      dragOffset = { x: coords.x - node.x, y: coords.y - node.y };
+      window.addEventListener('mousemove', dragNodeMove);
+      window.addEventListener('mouseup', stopNodeDrag, { once: true });
+    }
+
+    function dragNodeMove(evt) {
+      if (!dragNodeId) return;
+      const node = graphNodes.find((n) => n.id === dragNodeId);
+      if (!node) return;
+      const coords = getSVGCoordinates(evt);
+      node.x = Math.max(20, Math.min(780, coords.x - dragOffset.x));
+      node.y = Math.max(20, Math.min(380, coords.y - dragOffset.y));
+      renderGraph();
+    }
+
+    function stopNodeDrag() {
+      dragNodeId = null;
+      window.removeEventListener('mousemove', dragNodeMove);
+      computeSystem();
+    }
+
+    function renderGraph() {
+      if (!graphCanvas) return;
+      graphCanvas.innerHTML = '';
+
+      const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+      const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
+      marker.setAttribute('id', 'arrowhead');
+      marker.setAttribute('markerWidth', '6');
+      marker.setAttribute('markerHeight', '6');
+      marker.setAttribute('refX', '5');
+      marker.setAttribute('refY', '3');
+      marker.setAttribute('orient', 'auto');
+      const markerPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      markerPath.setAttribute('d', 'M0,0 L6,3 L0,6 Z');
+      markerPath.setAttribute('fill', '#3a4f8a');
+      marker.appendChild(markerPath);
+      defs.appendChild(marker);
+      graphCanvas.appendChild(defs);
+
+      graphEdges.forEach((edge) => {
+        const from = graphNodes.find((n) => n.id === edge.from);
+        const to = graphNodes.find((n) => n.id === edge.to);
+        if (!from || !to) return;
+        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        line.setAttribute('x1', from.x);
+        line.setAttribute('y1', from.y);
+        line.setAttribute('x2', to.x);
+        line.setAttribute('y2', to.y);
+        line.setAttribute('class', 'graph-edge');
+        graphCanvas.appendChild(line);
+      });
+
+      graphNodes.forEach((node) => {
+        const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        group.setAttribute('class', `graph-node${node.type === 'merge' ? ' merge' : ''}${
+          pendingEdgeStartId === node.id ? ' pending' : ''
+        }`);
+        group.dataset.id = node.id;
+        const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        const radius = node.type === 'merge' ? 10 : 16;
+        circle.setAttribute('cx', node.x);
+        circle.setAttribute('cy', node.y);
+        circle.setAttribute('r', radius);
+        group.appendChild(circle);
+
+        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        text.setAttribute('x', node.x);
+        text.setAttribute('y', node.y - (node.type === 'merge' ? 18 : 22));
+        text.textContent = getGraphNodeLabel(node);
+        group.appendChild(text);
+
+        const availabilityText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        availabilityText.setAttribute('x', node.x);
+        availabilityText.setAttribute('y', node.y + (node.type === 'merge' ? 20 : 24));
+        const availability = getGraphNodeAvailability(node);
+        availabilityText.textContent = Number.isFinite(availability)
+          ? formatPct(availability)
+          : '—';
+        group.appendChild(availabilityText);
+
+        group.addEventListener('mousedown', (event) => startNodeDrag(node, event));
+        group.addEventListener('click', (event) => {
+          event.stopPropagation();
+          if (graphMode === 'add-edge') {
+            handleEdgeSelection(node);
+          }
+        });
+
+        graphCanvas.appendChild(group);
+      });
+
+      graphEmptyEl.style.display = graphNodes.length ? 'none' : 'block';
+    }
+
+    function refreshGraphLists() {
+      graphNodeListEl.innerHTML = '';
+      graphEdgeListEl.innerHTML = '';
+
+      if (!graphNodes.length) {
+        const empty = document.createElement('div');
+        empty.className = 'hint';
+        empty.textContent = 'No nodes defined yet.';
+        graphNodeListEl.appendChild(empty);
+      } else {
+        graphNodes.forEach((node) => {
+          const row = document.createElement('div');
+          row.className = 'item';
+          const span = document.createElement('span');
+          span.textContent = `${getGraphNodeLabel(node)}${node.type === 'merge' ? '' : ' ↔ component'}`;
+          const delBtn = document.createElement('button');
+          delBtn.className = 'danger';
+          delBtn.textContent = 'Delete';
+          delBtn.addEventListener('click', () => {
+            if (confirm(`Remove node ${getGraphNodeLabel(node)}?`)) {
+              deleteGraphNode(node.id);
+            }
+          });
+          row.appendChild(span);
+          row.appendChild(delBtn);
+          graphNodeListEl.appendChild(row);
+        });
+      }
+
+      if (!graphEdges.length) {
+        const empty = document.createElement('div');
+        empty.className = 'hint';
+        empty.textContent = 'No edges defined yet.';
+        graphEdgeListEl.appendChild(empty);
+      } else {
+        graphEdges.forEach((edge) => {
+          const from = graphNodes.find((n) => n.id === edge.from);
+          const to = graphNodes.find((n) => n.id === edge.to);
+          const row = document.createElement('div');
+          row.className = 'item';
+          const span = document.createElement('span');
+          span.textContent = `${from ? getGraphNodeLabel(from) : 'Unknown'} → ${
+            to ? getGraphNodeLabel(to) : 'Unknown'
+          }`;
+          const delBtn = document.createElement('button');
+          delBtn.className = 'danger';
+          delBtn.textContent = 'Delete';
+          delBtn.addEventListener('click', () => {
+            if (confirm('Remove this edge?')) {
+              deleteGraphEdge(edge.id);
+            }
+          });
+          row.appendChild(span);
+          row.appendChild(delBtn);
+          graphEdgeListEl.appendChild(row);
+        });
+      }
+    }
+
+    function refreshGraph() {
+      renderGraph();
+      refreshGraphLists();
+      refreshGraphModeButtons();
+      if (graphNodes.length < 2 && graphMode === 'add-edge') {
+        setGraphMode(null);
+      }
+    }
+
+    function computeGraphStages(windowHours) {
+      derivedGraphStages = [];
+      if (!graphNodes.length) {
+        return [];
+      }
+
+      const indegree = new Map();
+      const adjacency = new Map();
+      graphNodes.forEach((node) => {
+        indegree.set(node.id, 0);
+        adjacency.set(node.id, []);
+      });
+      graphEdges.forEach((edge) => {
+        if (!indegree.has(edge.to) || !adjacency.has(edge.from)) return;
+        indegree.set(edge.to, (indegree.get(edge.to) || 0) + 1);
+        adjacency.get(edge.from).push(edge.to);
+      });
+
+      const queue = [];
+      indegree.forEach((value, key) => {
+        if (value === 0) {
+          queue.push(key);
+        }
+      });
+
+      const depth = new Map();
+      queue.forEach((id) => depth.set(id, 0));
+
+      for (let i = 0; i < queue.length; i += 1) {
+        const current = queue[i];
+        const currentDepth = depth.get(current) || 0;
+        const neighbors = adjacency.get(current) || [];
+        neighbors.forEach((next) => {
+          const nextDepth = Math.max(depth.get(next) || 0, currentDepth + 1);
+          depth.set(next, nextDepth);
+          indegree.set(next, (indegree.get(next) || 1) - 1);
+          if (indegree.get(next) === 0) {
+            queue.push(next);
+          }
+        });
+      }
+
+      const byDepth = new Map();
+      graphNodes.forEach((node) => {
+        const layer = depth.get(node.id) ?? 0;
+        if (!byDepth.has(layer)) {
+          byDepth.set(layer, []);
+        }
+        byDepth.get(layer).push(node);
+      });
+
+      const orderedDepths = Array.from(byDepth.keys()).sort((a, b) => a - b);
+      const stageSummaries = [];
+
+      orderedDepths.forEach((layer, index) => {
+        const nodes = byDepth.get(layer) || [];
+        if (!nodes.length) return;
+        const stage = {
+          id: `graph-${index + 1}`,
+          name: `Graph Stage ${index + 1}`,
+          type: nodes.length > 1 ? 'parallel' : 'series',
+          nodeIds: nodes.map((node) => node.id),
+        };
+
+        const labels = [];
+        const availabilities = [];
+        let valid = true;
+        nodes.forEach((node) => {
+          labels.push(getGraphNodeLabel(node));
+          const availability = getGraphNodeAvailability(node);
+          if (availability === null) {
+            valid = false;
+          } else {
+            availabilities.push(availability);
+          }
+        });
+
+        let availability = 1;
+        if (!availabilities.length || !valid) {
+          availability = NaN;
+        } else if (stage.type === 'parallel') {
+          let product = 1;
+          availabilities.forEach((value) => {
+            product *= 1 - value;
+          });
+          availability = 1 - product;
+        } else {
+          availabilities.forEach((value) => {
+            availability *= value;
+          });
+        }
+
+        const unavailability = Number.isFinite(availability) ? 1 - availability : NaN;
+        const downtimeHours = Number.isFinite(unavailability) ? unavailability * windowHours : NaN;
+
+        const summary = {
+          stage,
+          detail: {
+            availability,
+            unavailability,
+            downtimeHours,
+            labels: labels.join(', '),
+          },
+        };
+        stageSummaries.push(summary);
+      });
+
+      derivedGraphStages = stageSummaries.map((item) => ({
+        name: item.stage.name,
+        type: item.stage.type,
+        availability: item.detail.availability,
+        unavailability: item.detail.unavailability,
+        downtimeHours: item.detail.downtimeHours,
+        labels: item.detail.labels,
+      }));
+
+      return stageSummaries;
+    }
+
 
     function resetForm() {
       nameInput.value = '';
@@ -569,8 +1205,13 @@ Expected downtime (hours) = (1 − A) × window_hours
       stages.forEach((stage) => {
         stage.componentIds = stage.componentIds.filter((compId) => compId !== id);
       });
+      const removedNodes = graphNodes.filter((node) => node.type === 'component' && node.componentId === id).map((node) => node.id);
+      removedNodes.forEach((nodeId) => removeGraphNodeInternal(nodeId));
       refreshComponents();
       refreshStages();
+      if (removedNodes.length) {
+        refreshGraph();
+      }
       computeSystem();
     }
 
@@ -630,6 +1271,9 @@ Expected downtime (hours) = (1 − A) × window_hours
 
         componentListEl.appendChild(card);
       });
+
+      refreshGraphComponentSelect();
+      refreshGraph();
     }
 
     function addStage() {
@@ -674,7 +1318,8 @@ Expected downtime (hours) = (1 − A) × window_hours
 
     function refreshStages() {
       stageListEl.innerHTML = '';
-      stageEmptyEl.style.display = stages.length ? 'none' : 'block';
+      const hasDerived = derivedGraphStages.length > 0;
+      stageEmptyEl.style.display = stages.length || hasDerived ? 'none' : 'block';
 
       stages.forEach((stage) => {
         const card = document.createElement('div');
@@ -742,6 +1387,43 @@ Expected downtime (hours) = (1 − A) × window_hours
 
         stageListEl.appendChild(card);
       });
+
+      if (hasDerived) {
+        const divider = document.createElement('div');
+        divider.className = 'hint';
+        divider.textContent = 'Graph-derived stages';
+        stageListEl.appendChild(divider);
+
+        derivedGraphStages.forEach((stage) => {
+          const card = document.createElement('div');
+          card.className = 'stage-card';
+          const head = document.createElement('div');
+          head.className = 'stage-head';
+
+          const name = document.createElement('div');
+          name.textContent = stage.name;
+          head.appendChild(name);
+
+          const typeBadge = document.createElement('span');
+          typeBadge.className = 'chip';
+          typeBadge.textContent = stage.type === 'parallel' ? 'Parallel' : 'Series';
+          head.appendChild(typeBadge);
+
+          card.appendChild(head);
+
+          const stats = document.createElement('div');
+          stats.className = 'stage-stats';
+          stats.innerHTML = `
+            <div>Availability</div><div>${formatPct(stage.availability)}</div>
+            <div>Unavailability</div><div>${formatPct(stage.unavailability)}</div>
+            <div>Downtime (${getWindowHours()} h)</div><div>${hoursToHuman(stage.downtimeHours)}</div>
+            <div>Nodes</div><div>${stage.labels || '—'}</div>
+          `;
+          card.appendChild(stats);
+
+          stageListEl.appendChild(card);
+        });
+      }
     }
 
     function computeStageAvailability(stage) {
@@ -795,31 +1477,47 @@ Expected downtime (hours) = (1 − A) × window_hours
 
     function computeSystem() {
       const windowHours = getWindowHours();
-      if (!stages.length) {
+      let usingGraph = false;
+      let stageSummaries = [];
+
+      if (graphNodes.length) {
+        stageSummaries = computeGraphStages(windowHours);
+        usingGraph = !!stageSummaries.length;
+      } else {
+        derivedGraphStages = [];
+      }
+
+      if (!usingGraph) {
+        stageSummaries = stages.map((stage) => ({ stage, detail: computeStageAvailability(stage) }));
+      }
+
+      if (!stageSummaries.length) {
         systemAvailabilityEl.textContent = '—';
         systemUnavailabilityEl.textContent = '—';
         systemDowntimeEl.textContent = '—';
-        systemDowntimeDetailEl.textContent = 'Add stages to compute results.';
+        systemDowntimeDetailEl.textContent = usingGraph
+          ? 'Add edges or components to the graph to define computation stages.'
+          : 'Add stages to compute results.';
         systemStatusEl.textContent = 'Waiting for topology…';
         systemStatusEl.className = 'value';
+        refreshStages();
         return;
       }
 
-      let systemAvailability = 1;
-      const stageDetails = stages.map((stage) => computeStageAvailability(stage));
-
-      if (stageDetails.some((d) => !Number.isFinite(d.availability))) {
+      if (stageSummaries.some((item) => !Number.isFinite(item.detail.availability))) {
         systemAvailabilityEl.textContent = '—';
         systemUnavailabilityEl.textContent = '—';
         systemDowntimeEl.textContent = '—';
         systemDowntimeDetailEl.textContent = 'Some stages are missing valid availability values.';
         systemStatusEl.textContent = 'Cannot evaluate';
         systemStatusEl.className = 'value status-warn';
+        refreshStages();
         return;
       }
 
-      stageDetails.forEach((detail) => {
-        systemAvailability *= detail.availability;
+      let systemAvailability = 1;
+      stageSummaries.forEach((item) => {
+        systemAvailability *= item.detail.availability;
       });
 
       const systemUnavailability = 1 - systemAvailability;
@@ -848,9 +1546,18 @@ Expected downtime (hours) = (1 − A) × window_hours
       stages.splice(0, stages.length);
       nextComponentId = 1;
       nextStageId = 1;
+      graphNodes.splice(0, graphNodes.length);
+      graphEdges.splice(0, graphEdges.length);
+      nextGraphNodeId = 1;
+      nextGraphEdgeId = 1;
+      mergeDotCount = 1;
+      pendingEdgeStartId = null;
+      derivedGraphStages = [];
+      setGraphMode(null);
       resetForm();
       refreshComponents();
       refreshStages();
+      refreshGraph();
       computeSystem();
     }
 
@@ -867,6 +1574,25 @@ Expected downtime (hours) = (1 − A) × window_hours
         { id: nextStageId++, name: 'Core Switching', type: 'series', componentIds: [3] },
         { id: nextStageId++, name: 'Security Tier', type: 'series', componentIds: [4] },
       );
+
+      const entryMerge = addMergeDotNode(320, 220);
+      const routerA = addGraphNodeFromComponent(1, 160, 160);
+      const routerB = addGraphNodeFromComponent(2, 160, 280);
+      const core = addGraphNodeFromComponent(3, 480, 200);
+      const firewall = addGraphNodeFromComponent(4, 640, 200);
+
+      if (routerA && entryMerge) {
+        graphEdges.push({ id: nextGraphEdgeId++, from: routerA.id, to: entryMerge.id });
+      }
+      if (routerB && entryMerge) {
+        graphEdges.push({ id: nextGraphEdgeId++, from: routerB.id, to: entryMerge.id });
+      }
+      if (entryMerge && core) {
+        graphEdges.push({ id: nextGraphEdgeId++, from: entryMerge.id, to: core.id });
+      }
+      if (core && firewall) {
+        graphEdges.push({ id: nextGraphEdgeId++, from: core.id, to: firewall.id });
+      }
     }
 
     saveComponentBtn.addEventListener('click', upsertComponent);
@@ -878,6 +1604,39 @@ Expected downtime (hours) = (1 − A) × window_hours
       refreshComponents();
       refreshStages();
     });
+    if (graphAddNodeBtn) {
+      graphAddNodeBtn.addEventListener('click', () => {
+        if (!components.length) {
+          alert('Add components before placing nodes.');
+          return;
+        }
+        setGraphMode(graphMode === 'add-node' ? null : 'add-node');
+      });
+    }
+    if (graphAddEdgeBtn) {
+      graphAddEdgeBtn.addEventListener('click', () => {
+        if (graphNodes.length < 2) {
+          alert('Create at least two nodes before connecting them.');
+          return;
+        }
+        setGraphMode(graphMode === 'add-edge' ? null : 'add-edge');
+      });
+    }
+    if (graphAddMergeBtn) {
+      graphAddMergeBtn.addEventListener('click', () => {
+        setGraphMode(graphMode === 'add-merge' ? null : 'add-merge');
+      });
+    }
+    if (graphCancelBtn) {
+      graphCancelBtn.addEventListener('click', () => {
+        pendingEdgeStartId = null;
+        setGraphMode(null);
+        refreshGraph();
+      });
+    }
+    if (graphCanvas) {
+      graphCanvas.addEventListener('click', handleCanvasClick);
+    }
 
     seedData();
     refreshComponents();
