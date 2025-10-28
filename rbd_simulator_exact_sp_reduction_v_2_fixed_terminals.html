@@ -82,7 +82,7 @@
         </div>
         <div class="hint" style="margin-top:8px">
           In <b>Connect</b> mode: click first node then second to link once. Hold <span class="kbd">Shift</span> to chain; click empty space or press <span class="kbd">Esc</span> to cancel.
-          Start and End clouds are fixed and cannot be removed or added.
+          Service Entry and Service Exit terminals are fixed and cannot be removed or added.
         </div>
       </div>
 
@@ -150,31 +150,78 @@
     window.addEventListener('resize', resize);
 
     const Tools={SELECT:'select',CONNECT:'connect',DELETE:'delete',ROUTER:'router',SWITCH:'switch',FIREWALL:'firewall'}; // removed CLOUD tool
-    let state={tool:Tools.SELECT,nodes:[],edges:[],selId:null,connectingFrom:null,nextId:1};
+    const TERMINAL_DEFAULT_LABELS={start:'Service Entry',end:'Service Exit'};
+    let state={tool:Tools.SELECT,nodes:[],edges:[],selId:null,connectingFrom:null,nextId:1,terminalLabels:{start:TERMINAL_DEFAULT_LABELS.start,end:TERMINAL_DEFAULT_LABELS.end}};
     const defaults={rel:0.99};
 
     function clearConnecting(){ state.connectingFrom=null; }
 
-    function ensureFixedTerminals(){
-      // exactly one start and one end; create if missing; make unremovable
-      let start = state.nodes.find(n=>n.role==='start');
-      let end = state.nodes.find(n=>n.role==='end');
-      if(!start){ addNode('cloud', 120, canvas.height/2||300, {role:'start', name:'Start', rel:1}); }
-      if(!end){ addNode('cloud', (canvas.width-120)||900, canvas.height/2||300, {role:'end', name:'End', rel:1}); }
+    function buildNode(type,x,y,extra={}){
+      const id=state.nextId++;
+      const base={id,type,x,y,w:120,h:58,name:(extra.name?extra.name:(type==='cloud'?'Cloud':'Block')+' '+id),rel:defaults.rel,role:null,locked:false};
+      Object.assign(base,extra);
+      const role=base.role;
+      if(role==='start' || role==='end'){
+        if(!state.terminalLabels) state.terminalLabels={start:TERMINAL_DEFAULT_LABELS.start,end:TERMINAL_DEFAULT_LABELS.end};
+        base.locked=true;
+        base.type='cloud';
+        base.rel=1.0;
+        const fallback=state.terminalLabels[role]||TERMINAL_DEFAULT_LABELS[role];
+        base.name=(base.name && base.name.trim())?base.name:fallback;
+        state.terminalLabels[role]=base.name;
+      }
+      return base;
     }
 
     function addNode(type,x,y,extra={}){
       // block adding arbitrary clouds from UI (type will only be router/switch/firewall here)
-      const id=state.nextId++;
-      const base={id,type,x,y,w:120,h:58,name:(extra.name?extra.name:(type==='cloud'?'Cloud':'Block')+' '+id),rel:defaults.rel,role:null, locked:false};
-      Object.assign(base,extra);
-      if(base.role==='start' || base.role==='end'){ base.locked=true; base.type='cloud'; base.rel=1.0; }
-      state.nodes.push(base);
-      selectNode(id);
+      const node=buildNode(type,x,y,extra);
+      state.nodes.push(node);
+      selectNode(node.id);
       schedulePersist(); draw();
+      return node;
     }
 
-    function deleteSelected(){ if(!state.selId) return; const id=state.selId; const node=state.nodes.find(n=>n.id===id); if(node && (node.locked)){ alert('Start/End cannot be removed.'); return; } state.nodes=state.nodes.filter(n=>n.id!==id); state.edges=state.edges.filter(e=>e.a!==id && e.b!==id); state.selId=null; updateInspector(); buildObjectList(); schedulePersist(); draw(); }
+    function ensureTerminals(){
+      if(!state.terminalLabels){ state.terminalLabels={start:TERMINAL_DEFAULT_LABELS.start,end:TERMINAL_DEFAULT_LABELS.end}; }
+      state.terminalLabels.start=state.terminalLabels.start||TERMINAL_DEFAULT_LABELS.start;
+      state.terminalLabels.end=state.terminalLabels.end||TERMINAL_DEFAULT_LABELS.end;
+      let changed=false; const prevSel=state.selId; let selectionChanged=false;
+      ['start','end'].forEach(role=>{
+        const nodes=state.nodes.filter(n=>n.role===role);
+        if(nodes.length){
+          const keeper=nodes[0];
+          if(keeper.type!=='cloud'){ keeper.type='cloud'; changed=true; }
+          if(!keeper.locked){ keeper.locked=true; changed=true; }
+          if(keeper.rel!==1){ keeper.rel=1; changed=true; }
+          if(!keeper.name || !keeper.name.trim()){ keeper.name=state.terminalLabels[role]; changed=true; }
+          state.terminalLabels[role]=keeper.name;
+          for(let i=1;i<nodes.length;i++){
+            const dup=nodes[i];
+            if(dup.role){ dup.role=null; changed=true; }
+            if(dup.locked){ dup.locked=false; changed=true; }
+            if(dup.type==='cloud'){ dup.type='router'; changed=true; }
+            if(!dup.name || dup.name===state.terminalLabels[role]){ dup.name=`Block ${dup.id}`; changed=true; }
+            if(!isFinite(dup.rel)){ dup.rel=defaults.rel; changed=true; }
+          }
+        } else {
+          const x=role==='start'?120:((canvas.width||0)>0?canvas.width-120:900);
+          const y=(canvas.height||0)>0?canvas.height/2:300;
+          const label=state.terminalLabels[role]||TERMINAL_DEFAULT_LABELS[role];
+          const node=buildNode('cloud',x,y,{role,name:label,rel:1});
+          state.nodes.push(node);
+          state.terminalLabels[role]=node.name;
+          changed=true;
+        }
+      });
+      if(prevSel && !state.nodes.some(n=>n.id===prevSel)){ state.selId=null; selectionChanged=true; }
+      else if(!prevSel){ state.selId=null; }
+      else { state.selId=prevSel; }
+      if(changed || selectionChanged){ updateInspector(); draw(); }
+      if(changed) schedulePersist();
+    }
+
+    function deleteSelected(){ if(!state.selId) return; const id=state.selId; const node=state.nodes.find(n=>n.id===id); if(node && (node.role==='start'||node.role==='end'||node.locked)){ return; } state.nodes=state.nodes.filter(n=>n.id!==id); state.edges=state.edges.filter(e=>e.a!==id && e.b!==id); state.selId=null; updateInspector(); buildObjectList(); schedulePersist(); draw(); }
 
     function toggleTool(t){ state.tool=t; $('#modeLabel').textContent=({select:'Select/Move',connect:'Connect',delete:'Delete',router:'Block (Router)',switch:'Block (Switch)',firewall:'Block (Firewall)'})[t]; document.querySelectorAll('.palette .tool').forEach(b=>b.classList.toggle('active', b.dataset.tool===t)); if(t!==Tools.CONNECT) clearConnecting(); }
     document.querySelectorAll('.palette .tool').forEach(btn=>btn.addEventListener('click',()=>toggleTool(btn.dataset.tool)));
@@ -185,7 +232,7 @@
     canvas.addEventListener('mousedown',(e)=>{ const p=toCanvas(e); const hit=hitTest(p.x,p.y);
       if(state.tool===Tools.SELECT){ if(hit){ selectNode(hit.id); dragging=hit; dragOffset={x:p.x-hit.x,y:p.y-hit.y}; } else { state.selId=null; updateInspector(); draw(); } }
       else if(state.tool===Tools.CONNECT){ if(hit){ if(state.connectingFrom==null){ state.connectingFrom=hit.id; state.selId=hit.id; draw(); } else if(state.connectingFrom!==hit.id){ addEdge(state.connectingFrom, hit.id); state.selId=hit.id; if(e.shiftKey) state.connectingFrom=hit.id; else clearConnecting(); } } else { clearConnecting(); } }
-      else if(state.tool===Tools.DELETE){ if(hit){ state.selId=hit.id; deleteSelected(); } }
+      else if(state.tool===Tools.DELETE){ if(hit){ if(hit.role==='start'||hit.role==='end'){ return; } state.selId=hit.id; deleteSelected(); } }
       else { const type=state.tool; addNode(type,p.x,p.y); toggleTool(Tools.SELECT); }
     });
     canvas.addEventListener('mousemove',(e)=>{ const p=toCanvas(e); if(dragging){ dragging.x=p.x-dragOffset.x; dragging.y=p.y-dragOffset.y; draw(); } })
@@ -203,19 +250,18 @@
 
     function nodeReliability(n){ if(n.role==='start'||n.role==='end') return 1; const r=Number(n.rel); if(!isFinite(r)) return 1; return Math.max(0,Math.min(1,r)); }
 
-    function updateInspector(){ const pane=$('#inspectorContent'); const n=state.nodes.find(n=>n.id===state.selId); if(!n){ pane.innerHTML='<span class="hint">Select a block to edit its properties.</span>'; return; } const isTerminal=(n.role==='start'||n.role==='end'); pane.innerHTML=`
+    function updateInspector(){ const pane=$('#inspectorContent'); const n=state.nodes.find(n=>n.id===state.selId); if(!n){ pane.innerHTML='<span class="hint">Select a block to edit its properties.</span>'; return; } const isTerminal=(n.role==='start'||n.role==='end'); const actions=isTerminal?'<div class="hint">Terminals cannot be deleted.</div>':`<div class="toolrow"><button id="applyBtn" class="primary">Apply</button><button id="deleteBtn" class="danger">Delete</button></div>`; pane.innerHTML=`
       <div class="row"><span>Type</span><span class="chip">${isTerminal?n.role.toUpperCase():n.type.toUpperCase()}</span></div>
       <div class="row"><span>ID</span><span class="chip">${n.id}</span></div>
       <div class="row"><span>Name</span><input id="inpName" ${isTerminal?'disabled':''} value="${n.name}"></div>
       <div class="row"><span>Reliability R (0..1)</span><input id="inpREL" type="number" min="0" max="1" step="0.000001" ${isTerminal?'disabled':''} value="${isFinite(n.rel)?n.rel:''}"></div>
       <div class="row"><span>R (%)</span><span class="chip">${(nodeReliability(n)*100).toFixed(6)}%</span></div>
-      <div class="toolrow"><button id="applyBtn" class="primary" ${isTerminal?'disabled':''}>Apply</button><button id="deleteBtn" class="danger" ${isTerminal?'disabled':''}>Delete</button></div>
-      ${isTerminal?`<div class="hint">Fixed terminal (uneditable, unremovable).</div>`:''}
+      ${actions}
     `; $('#applyBtn') && ($('#applyBtn').onclick=()=>{ if(isTerminal) return; n.name=$('#inpName').value.trim()||n.name; const rel=parseFloat($('#inpREL').value); if(isFinite(rel)) n.rel=Math.max(0,Math.min(1,rel)); schedulePersist(); draw(); updateInspector(); buildObjectList(); }); $('#deleteBtn') && ($('#deleteBtn').onclick=()=>{ if(isTerminal) return; selectNode(n.id); deleteSelected(); }); }
 
     $('#deselectBtn').onclick=()=>{ state.selId=null; updateInspector(); draw(); };
 
-    function buildObjectList(){ const box=$('#objectList'); box.innerHTML=''; state.nodes.filter(n=>!(n.role==='start'||n.role==='end')).forEach(n=>{ const div=document.createElement('div'); div.className='item'; div.innerHTML=`<span class="name">${n.name}</span><span class="hint">R=${(nodeReliability(n)*100).toFixed(4)}%</span>`; div.onclick=()=>{ selectNode(n.id); }; box.appendChild(div); }); }
+    function buildObjectList(){ ensureTerminals(); const box=$('#objectList'); box.innerHTML=''; state.nodes.filter(n=>!(n.role==='start'||n.role==='end')).forEach(n=>{ const div=document.createElement('div'); div.className='item'; div.innerHTML=`<span class="name">${n.name}</span><span class="hint">R=${(nodeReliability(n)*100).toFixed(4)}%</span>`; div.onclick=()=>{ selectNode(n.id); }; box.appendChild(div); }); }
 
     // Fit & helpers
     $('#fitBtn').onclick=()=>{ const midY=canvas.height/2; const start=state.nodes.find(n=>n.role==='start'); const end=state.nodes.find(n=>n.role==='end'); if(start){ start.x=120*DPI; start.y=midY; } if(end){ end.x=canvas.width-120*DPI; end.y=midY; } draw(); schedulePersist(); };
@@ -224,15 +270,15 @@
 
     // Export/Import/Reset
     $('#exportBtn').onclick=()=>{ const data=JSON.stringify(state,null,2); const blob=new Blob([data],{type:'application/json'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='rbd_sp_graph.json'; a.click(); URL.revokeObjectURL(url); };
-    $('#importBtn').onclick=()=>{ const inp=document.createElement('input'); inp.type='file'; inp.accept='.json,application/json'; inp.onchange=()=>{ const f=inp.files[0]; if(!f) return; const reader=new FileReader(); reader.onload=()=>{ try{ const obj=JSON.parse(reader.result); if(obj && obj.nodes && obj.edges){ state=obj; ensureFixedTerminals(); draw(); updateInspector(); buildObjectList(); persist(); } }catch(err){ alert('Invalid JSON'); } }; reader.readAsText(f); }; inp.click(); };
-    $('#resetBtn').onclick=()=>{ if(confirm('Reset graph?')){ state={tool:Tools.SELECT,nodes:[],edges:[],selId:null,connectingFrom:null,nextId:1}; ensureFixedTerminals(); buildObjectList(); updateInspector(); draw(); persist(); } };
+    $('#importBtn').onclick=()=>{ const inp=document.createElement('input'); inp.type='file'; inp.accept='.json,application/json'; inp.onchange=()=>{ const f=inp.files[0]; if(!f) return; const reader=new FileReader(); reader.onload=()=>{ try{ const obj=JSON.parse(reader.result); if(obj && obj.nodes && obj.edges){ state=obj; ensureTerminals(); draw(); updateInspector(); buildObjectList(); persist(); } }catch(err){ alert('Invalid JSON'); } }; reader.readAsText(f); }; inp.click(); };
+    $('#resetBtn').onclick=()=>{ if(confirm('Reset graph?')){ state={tool:Tools.SELECT,nodes:[],edges:[],selId:null,connectingFrom:null,nextId:1,terminalLabels:{start:TERMINAL_DEFAULT_LABELS.start,end:TERMINAL_DEFAULT_LABELS.end}}; ensureTerminals(); buildObjectList(); updateInspector(); draw(); persist(); } };
 
     toggleTool(Tools.SELECT);
 
     // Persistence
     let persistTimer=null; function persist(){ localStorage.setItem('rbd_sp_exact_state_v2', JSON.stringify(state)); }
     function schedulePersist(){ clearTimeout(persistTimer); persistTimer=setTimeout(persist,250); }
-    (function load(){ const raw=localStorage.getItem('rbd_sp_exact_state_v2'); if(raw){ try{ state=JSON.parse(raw);}catch{} } resize(); ensureFixedTerminals(); draw(); buildObjectList(); updateInspector(); })();
+    (function load(){ const raw=localStorage.getItem('rbd_sp_exact_state_v2'); if(raw){ try{ state=JSON.parse(raw);}catch{} } resize(); ensureTerminals(); draw(); buildObjectList(); updateInspector(); })();
 
     // ==== Exact Series/Parallel Reduction (directed edge network from node model) ====
     function logLine(s){ const el=$('#log'); el.style.display='block'; el.textContent += s + "\n"; }
@@ -290,12 +336,12 @@
     // ----------------------------
     // Self-tests (deterministic exact)
     // ----------------------------
-    function buildEmptyGraph(){ state={tool:Tools.SELECT,nodes:[],edges:[],selId:null,connectingFrom:null,nextId:1}; addNode('cloud',100,200,{role:'start',name:'Start'}); addNode('cloud',700,200,{role:'end',name:'End'}); }
+    function buildEmptyGraph(){ state={tool:Tools.SELECT,nodes:[],edges:[],selId:null,connectingFrom:null,nextId:1,terminalLabels:{start:TERMINAL_DEFAULT_LABELS.start,end:TERMINAL_DEFAULT_LABELS.end}}; state.nodes.push(buildNode('cloud',100,200,{role:'start',name:TERMINAL_DEFAULT_LABELS.start})); state.nodes.push(buildNode('cloud',700,200,{role:'end',name:TERMINAL_DEFAULT_LABELS.end})); }
     function addR(type,R,x,y){ addNode(type,x,y,{rel:R}); return state.nodes[state.nodes.length-1].id; }
     function connect(id1,id2){ state.edges.push({a:id1,b:id2}); }
 
     function runSelfTests(){ const log=$('#log'); log.style.display='block'; log.textContent='Running exact SP tests...\n'; const save=JSON.parse(JSON.stringify(state)); const results=[];
-      // 1) Simple chain: Start-3-4-End => R=R3*R4
+      // 1) Simple chain: Entry-3-4-Exit => R=R3*R4
       buildEmptyGraph(); let S=state.nodes.find(n=>n.role==='start').id; let T=state.nodes.find(n=>n.role==='end').id; let n3=addR('router',0.9,300,200); let n4=addR('firewall',0.8,500,200); connect(S,n3); connect(n3,n4); connect(n4,T); calcExact(); let got=parseFloat($('#relOut').textContent)/100; results.push({name:'Series 0.9·0.8', expected:0.72, got});
       // 2) Parallel 0.9 || 0.8
       buildEmptyGraph(); S=state.nodes.find(n=>n.role==='start').id; T=state.nodes.find(n=>n.role==='end').id; let p1=addR('switch',0.9,300,160); let p2=addR('switch',0.8,300,240); connect(S,p1); connect(p1,T); connect(S,p2); connect(p2,T); calcExact(); got=parseFloat($('#relOut').textContent)/100; results.push({name:'Parallel 0.9 || 0.8', expected:0.98, got});
