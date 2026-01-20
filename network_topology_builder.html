@@ -892,19 +892,33 @@ Satellite,BLD-07,0,BLD-06,,`;
         idText.setAttribute("font-weight", node.isCore ? "700" : "600");
         idText.textContent = node.id;
 
+        const labelBackground = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+        labelBackground.setAttribute("fill", "#ffffff");
+        labelBackground.setAttribute("fill-opacity", "0.92");
+        labelBackground.setAttribute("rx", "3");
+
         const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
         label.setAttribute("text-anchor", "middle");
         label.setAttribute("y", "34");
-        label.setAttribute("fill", "rgba(226, 230, 255, 0.8)");
+        label.setAttribute("fill", "#1b1c24");
         label.setAttribute("font-size", "9");
         label.textContent = node.name;
 
         group.appendChild(glow);
         group.appendChild(circle);
         group.appendChild(idText);
+        group.appendChild(labelBackground);
         group.appendChild(label);
         node.element = group;
         container.appendChild(group);
+
+        const labelBox = label.getBBox();
+        const paddingX = 5;
+        const paddingY = 2;
+        labelBackground.setAttribute("x", (labelBox.x - paddingX).toFixed(2));
+        labelBackground.setAttribute("y", (labelBox.y - paddingY).toFixed(2));
+        labelBackground.setAttribute("width", (labelBox.width + paddingX * 2).toFixed(2));
+        labelBackground.setAttribute("height", (labelBox.height + paddingY * 2).toFixed(2));
 
         enableDrag(node, group);
       });
@@ -1128,24 +1142,114 @@ Satellite,BLD-07,0,BLD-06,,`;
       const entities = [];
       const textHeight = 6;
       const nodeRadius = 10;
+      const labelOffset = nodeRadius + 12;
+      const bounds = getGraphBounds(0);
+      const mirrorX = (value) => bounds.minX + bounds.maxX - value;
+      const coreColorMap = buildCoreColorMap(nodes, coreColorOverrides);
+      const coreAssignments = buildCoreAssignments(nodes, edges);
+      const nodeById = new Map(nodes.map((node) => [node.id, node]));
+
+      function dxfColor(value) {
+        const hex = colorToHex(value);
+        if (!hex) return null;
+        return parseInt(hex.slice(1), 16);
+      }
+
+      function pushColor(color) {
+        const trueColor = dxfColor(color);
+        if (trueColor === null) return [];
+        return ["420", String(trueColor)];
+      }
+
+      function addText({ layer, x, y, height, text, color }) {
+        entities.push(
+          "0",
+          "TEXT",
+          "8",
+          layer,
+          ...pushColor(color),
+          "10",
+          x.toFixed(3),
+          "20",
+          y.toFixed(3),
+          "30",
+          "0",
+          "40",
+          height.toFixed(3),
+          "1",
+          text,
+          "72",
+          "1",
+          "73",
+          "2",
+          "11",
+          x.toFixed(3),
+          "21",
+          y.toFixed(3),
+          "31",
+          "0"
+        );
+      }
+
+      function addHatchCircle({ layer, x, y, radius, color }) {
+        entities.push(
+          "0",
+          "HATCH",
+          "8",
+          layer,
+          ...pushColor(color),
+          "10",
+          "0",
+          "20",
+          "0",
+          "30",
+          "0",
+          "2",
+          "SOLID",
+          "70",
+          "1",
+          "71",
+          "0",
+          "91",
+          "1",
+          "92",
+          "2",
+          "93",
+          "1",
+          "72",
+          "2",
+          "10",
+          x.toFixed(3),
+          "20",
+          y.toFixed(3),
+          "40",
+          radius.toFixed(3),
+          "73",
+          "1",
+          "97",
+          "0"
+        );
+      }
 
       edges.forEach((edge) => {
-        const source = nodes.find((node) => node.id === edge.source);
-        const target = nodes.find((node) => node.id === edge.target);
+        const source = nodeById.get(edge.source);
+        const target = nodeById.get(edge.target);
         if (!source || !target) return;
+        const edgeColor = getEdgeColor(edge, nodeById, coreColorMap, coreAssignments);
         entities.push(
           "0",
           "LINE",
           "8",
           "TOPOLOGY_EDGES",
+          ...pushColor(edgeColor),
           "10",
-          source.x.toFixed(3),
+          mirrorX(source.x).toFixed(3),
           "20",
           source.y.toFixed(3),
           "30",
           "0",
           "11",
-          target.x.toFixed(3),
+          mirrorX(target.x).toFixed(3),
           "21",
           target.y.toFixed(3),
           "31",
@@ -1155,52 +1259,45 @@ Satellite,BLD-07,0,BLD-06,,`;
 
       nodes.forEach((node) => {
         const layer = node.isCore ? "TOPOLOGY_CORE" : "TOPOLOGY_NODES";
+        const strokeColor = node.isCore
+          ? coreColorMap.get(node.id) || CORE_COLOR_PALETTE[0]
+          : "rgba(111, 123, 255, 0.9)";
+        const fillColor = node.isCore ? strokeColor : "#101a3c";
+        const x = mirrorX(node.x);
+        const y = node.y;
+
+        addHatchCircle({ layer, x, y, radius: nodeRadius, color: fillColor });
         entities.push(
           "0",
           "CIRCLE",
           "8",
           layer,
+          ...pushColor(strokeColor),
           "10",
-          node.x.toFixed(3),
+          x.toFixed(3),
           "20",
-          node.y.toFixed(3),
+          y.toFixed(3),
           "30",
           "0",
           "40",
           nodeRadius.toFixed(3)
         );
-        entities.push(
-          "0",
-          "TEXT",
-          "8",
+        addText({
           layer,
-          "10",
-          node.x.toFixed(3),
-          "20",
-          (node.y + nodeRadius + 6).toFixed(3),
-          "30",
-          "0",
-          "40",
-          textHeight.toFixed(3),
-          "1",
-          node.id
-        );
-        entities.push(
-          "0",
-          "TEXT",
-          "8",
-          "TOPOLOGY_LABELS",
-          "10",
-          node.x.toFixed(3),
-          "20",
-          (node.y - nodeRadius - 8).toFixed(3),
-          "30",
-          "0",
-          "40",
-          (textHeight - 1).toFixed(3),
-          "1",
-          node.name
-        );
+          x,
+          y,
+          height: textHeight,
+          text: node.id,
+          color: "#ffffff",
+        });
+        addText({
+          layer: "TOPOLOGY_LABELS",
+          x,
+          y: y + labelOffset,
+          height: textHeight - 1,
+          text: node.name,
+          color: "#1b1c24",
+        });
       });
 
       const content = [...header, ...entities, ...footer].join("\n");
