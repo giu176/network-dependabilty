@@ -253,9 +253,6 @@
     }
 
     .topology-controls {
-      position: absolute;
-      top: 16px;
-      right: 16px;
       display: flex;
       flex-wrap: wrap;
       gap: 10px;
@@ -265,8 +262,12 @@
       background: rgba(6, 10, 26, 0.78);
       border: 1px solid rgba(125, 146, 255, 0.25);
       backdrop-filter: blur(6px);
-      z-index: 2;
       max-width: min(90vw, 720px);
+    }
+
+    .topology-controls.header-controls {
+      flex: 1 1 420px;
+      justify-content: flex-end;
     }
 
     .topology-controls .control-group {
@@ -338,9 +339,8 @@
     <div class="header-copy">
       <h1>Network Topology Builder</h1>
       <p>
-        Upload a CSV (Building name, BuildingID, isCore, edge1, edge2, edge3, ...) or edit the
-        table to build a multi-edge network. Drag nodes around and scroll/drag the canvas to
-        explore an infinite workspace.
+        Build a clear picture of your sites and connections by importing a list of locations or
+        typing them in, then drag and zoom to explore how everything links together.
       </p>
     </div>
     <nav class="tabs" role="tablist" aria-label="Topology pages">
@@ -351,6 +351,24 @@
         Topology
       </button>
     </nav>
+    <div class="topology-controls header-controls" aria-label="Topology actions" hidden>
+      <div class="control-group">
+        <button id="render">Render topology</button>
+        <button id="release" class="secondary">Release node locks</button>
+        <button id="export-svg" class="secondary">Export SVG</button>
+        <button id="export-dxf" class="secondary">Export DXF</button>
+      </div>
+      <div class="control-group">
+        <label class="inline-toggle">
+          <input id="background-toggle" type="checkbox" />
+          Show background layer
+        </label>
+        <label class="range-control" for="background-scale">
+          Background scale <span class="range-output" id="background-scale-output">100%</span>
+          <input id="background-scale" type="range" min="0.5" max="2" step="0.05" value="1" />
+        </label>
+      </div>
+    </div>
   </header>
   <main>
     <section class="page page-settings active" id="page-settings" role="tabpanel" aria-labelledby="tab-settings">
@@ -411,24 +429,6 @@
 
     <section class="page page-topology" id="page-topology" role="tabpanel" aria-labelledby="tab-topology">
       <section class="workspace">
-        <div class="topology-controls" aria-label="Topology actions">
-          <div class="control-group">
-            <button id="render">Render topology</button>
-            <button id="release" class="secondary">Release node locks</button>
-            <button id="export-svg" class="secondary">Export SVG</button>
-            <button id="export-dxf" class="secondary">Export DXF</button>
-          </div>
-          <div class="control-group">
-            <label class="inline-toggle">
-              <input id="background-toggle" type="checkbox" />
-              Show background layer
-            </label>
-            <label class="range-control" for="background-scale">
-              Background scale <span class="range-output" id="background-scale-output">100%</span>
-              <input id="background-scale" type="range" min="0.5" max="2" step="0.05" value="1" />
-            </label>
-          </div>
-        </div>
         <svg id="graph" viewBox="-500 -400 1000 800" preserveAspectRatio="xMidYMid meet"></svg>
       </section>
     </section>
@@ -462,6 +462,7 @@ Satellite,BLD-07,0,BLD-06,,`;
     const topologyTabButton = document.getElementById("tab-topology");
     const settingsPage = document.getElementById("page-settings");
     const topologyPage = document.getElementById("page-topology");
+    const topologyControls = document.querySelector(".topology-controls");
     const coreEdgeColorInput = document.getElementById("core-edge-color");
     const coreEdgeColorText = document.getElementById("core-edge-color-text");
     const coreColorPanel = document.getElementById("core-color-panel");
@@ -1551,6 +1552,7 @@ Satellite,BLD-07,0,BLD-06,,`;
       topologyTabButton.classList.toggle("active", !isSettings);
       settingsTabButton.setAttribute("aria-selected", String(isSettings));
       topologyTabButton.setAttribute("aria-selected", String(!isSettings));
+      topologyControls.hidden = isSettings;
       if (!isSettings) {
         updateViewportTransform();
       }
