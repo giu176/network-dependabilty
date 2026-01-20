@@ -908,7 +908,7 @@ Satellite,BLD-07,0,BLD-06,,`;
 
         const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
         label.setAttribute("text-anchor", "middle");
-        label.setAttribute("y", "34");
+        label.setAttribute("y", "40");
         label.setAttribute("fill", "#1b1c24");
         label.setAttribute("font-size", "9");
         label.textContent = node.name;
@@ -1195,7 +1195,7 @@ Satellite,BLD-07,0,BLD-06,,`;
       const entities = [];
       const textHeight = 6;
       const nodeRadius = 10;
-      const labelOffset = nodeRadius + 12;
+      const labelOffset = nodeRadius + 16;
       const bounds = getDxfBounds(nodes, 0);
       const mirrorX = (value) => bounds.minX + bounds.maxX - value;
       const coreColorMap = buildCoreColorMap(nodes, coreColorOverrides);
