@@ -194,9 +194,9 @@
     <div>
       <h1>Network Topology Builder</h1>
       <p>
-        Upload a CSV (Building name, BuildingID, edge1, edge2) or edit the table to build a
-        2-edge-per-node network. Drag nodes around and scroll/drag the canvas to explore an
-        infinite workspace.
+        Upload a CSV (Building name, BuildingID, isCore, edge1, edge2, edge3, ...) or edit the
+        table to build a multi-edge network. Drag nodes around and scroll/drag the canvas to
+        explore an infinite workspace.
       </p>
     </div>
   </header>
@@ -211,8 +211,9 @@
       <button id="load-csv">Load CSV into table</button>
 
       <div class="legend">
-        <div><strong>Columns:</strong> Building name, BuildingID, edge1, edge2</div>
-        <div>Edges are built from: current BuildingID → edge1 and edge2.</div>
+        <div><strong>Columns:</strong> Building name, BuildingID, isCore, edge1, edge2, edge3...</div>
+        <div>Edges are built from: current BuildingID → edge columns.</div>
+        <div><strong>isCore:</strong> 1/0 (or true/false) to mark core nodes.</div>
       </div>
 
       <h2>Node table</h2>
@@ -222,14 +223,17 @@
             <tr>
               <th>Building name</th>
               <th>BuildingID</th>
+              <th>isCore</th>
               <th>edge1</th>
               <th>edge2</th>
+              <th>edge3</th>
             </tr>
           </thead>
           <tbody></tbody>
         </table>
       </div>
       <button id="add-row" class="secondary">Add row</button>
+      <button id="add-edge" class="secondary">Add edge column</button>
       <button id="render">Render topology</button>
       <button id="release" class="secondary">Release node locks</button>
 
@@ -245,18 +249,20 @@
   </main>
 
   <script>
-    const DEFAULT_CSV = `Building name,BuildingID,edge1,edge2
-HQ,BLD-01,BLD-02,BLD-03
-Warehouse,BLD-02,BLD-01,BLD-04
-Lab,BLD-03,BLD-01,BLD-05
-Data Center,BLD-04,BLD-02,BLD-06
-Remote Site,BLD-05,BLD-03,BLD-06
-Edge Hub,BLD-06,BLD-04,BLD-05`;
+    const DEFAULT_CSV = `Building name,BuildingID,isCore,edge1,edge2,edge3
+HQ,BLD-01,1,BLD-02,BLD-03,BLD-04
+Warehouse,BLD-02,0,BLD-01,BLD-04,
+Lab,BLD-03,0,BLD-01,BLD-05,
+Data Center,BLD-04,1,BLD-01,BLD-02,BLD-06
+Remote Site,BLD-05,0,BLD-03,BLD-06,
+Edge Hub,BLD-06,0,BLD-04,BLD-05,BLD-07
+Satellite,BLD-07,0,BLD-06,,`;
 
     const csvText = document.getElementById("csv-text");
     const loadCsvBtn = document.getElementById("load-csv");
     const nodeTableBody = document.querySelector("#node-table tbody");
     const addRowBtn = document.getElementById("add-row");
+    const addEdgeBtn = document.getElementById("add-edge");
     const renderBtn = document.getElementById("render");
     const releaseBtn = document.getElementById("release");
     const fileInput = document.getElementById("csv-file");
@@ -269,6 +275,7 @@ Edge Hub,BLD-06,BLD-04,BLD-05`;
     let zoom = 1;
     let isPanning = false;
     let lastPanPoint = null;
+    let edgeColumns = ["edge1", "edge2", "edge3"];
 
     function parseCsv(text) {
       const lines = text
@@ -320,9 +327,21 @@ Edge Hub,BLD-06,BLD-04,BLD-05`;
       rows.forEach((row) => addTableRow(row));
     }
 
+    function renderTableHeader() {
+      const headRow = document.querySelector("#node-table thead tr");
+      headRow.innerHTML = "";
+      const columns = ["Building name", "BuildingID", "isCore", ...edgeColumns];
+      columns.forEach((key) => {
+        const th = document.createElement("th");
+        th.textContent = key;
+        headRow.appendChild(th);
+      });
+    }
+
     function addTableRow(row = {}) {
       const tr = document.createElement("tr");
-      ["Building name", "BuildingID", "edge1", "edge2"].forEach((key) => {
+      const columns = ["Building name", "BuildingID", "isCore", ...edgeColumns];
+      columns.forEach((key) => {
         const td = document.createElement("td");
         const input = document.createElement("input");
         input.type = "text";
@@ -336,26 +355,53 @@ Edge Hub,BLD-06,BLD-04,BLD-05`;
     function rowsFromTable() {
       return Array.from(nodeTableBody.querySelectorAll("tr")).map((tr) => {
         const cells = tr.querySelectorAll("input");
-        return {
-          "Building name": cells[0].value.trim(),
-          BuildingID: cells[1].value.trim(),
-          edge1: cells[2].value.trim(),
-          edge2: cells[3].value.trim(),
+        const row = {
+          "Building name": cells[0]?.value.trim() || "",
+          BuildingID: cells[1]?.value.trim() || "",
+          isCore: cells[2]?.value.trim() || "",
         };
+        edgeColumns.forEach((key, index) => {
+          const cellIndex = index + 3;
+          row[key] = cells[cellIndex]?.value.trim() || "";
+        });
+        return row;
       });
+    }
+
+    function normalizeIsCore(value) {
+      const normalized = String(value || "").trim().toLowerCase();
+      return normalized === "1" || normalized === "true" || normalized === "yes";
+    }
+
+    function updateEdgeColumnsFromRows(rows) {
+      const rowKeys = rows[0] ? Object.keys(rows[0]) : [];
+      const detectedEdges = rowKeys.filter((key) => key.toLowerCase().startsWith("edge"));
+      if (detectedEdges.length > 0) {
+        edgeColumns = detectedEdges;
+      }
     }
 
     function buildGraph(rows) {
       const nodeMap = new Map();
       rows.forEach((row) => {
-        if (!row.BuildingID) return;
+        if (
+          !row.BuildingID ||
+          !row["Building name"] ||
+          row.isCore === undefined ||
+          row.isCore === "" ||
+          !row.edge1
+        )
+          return;
         const existing = nodeMap.get(row.BuildingID);
+        const isCore = normalizeIsCore(row.isCore);
         if (existing) {
           existing.name = row["Building name"] || existing.name;
+          existing.isCore = existing.isCore || isCore;
         } else {
           nodeMap.set(row.BuildingID, {
             id: row.BuildingID,
             name: row["Building name"] || row.BuildingID,
+            isCore,
             x: (Math.random() - 0.5) * 400,
             y: (Math.random() - 0.5) * 260,
             vx: 0,
@@ -371,13 +417,16 @@ Edge Hub,BLD-06,BLD-04,BLD-05`;
       rows.forEach((row) => {
         const sourceId = row.BuildingID;
         if (!sourceId) return;
-        const targets = [row.edge1, row.edge2].filter(Boolean);
+        const targets = edgeColumns
+          .map((key) => row[key])
+          .filter((value) => value && value.length > 0);
         targets.forEach((targetId) => {
           if (!targetId) return;
           if (!nodeMap.has(targetId)) {
             nodeMap.set(targetId, {
               id: targetId,
               name: targetId,
+              isCore: false,
               x: (Math.random() - 0.5) * 400,
               y: (Math.random() - 0.5) * 260,
               vx: 0,
@@ -394,7 +443,72 @@ Edge Hub,BLD-06,BLD-04,BLD-05`;
         });
       });
 
-      return { nodes: Array.from(nodeMap.values()), edges: edgeList };
+      const graph = { nodes: Array.from(nodeMap.values()), edges: edgeList };
+      applyRadialLayout(graph.nodes, graph.edges);
+      return graph;
+    }
+
+    function applyRadialLayout(graphNodes, graphEdges) {
+      if (!graphNodes.length) return;
+      const coreNodes = graphNodes.filter((node) => node.isCore);
+      const nonCoreNodes = graphNodes.filter((node) => !node.isCore);
+      const coreCount = coreNodes.length || 1;
+      const coreRadius = coreNodes.length > 1 ? 140 : 0;
+      const twoPi = Math.PI * 2;
+
+      coreNodes.forEach((node, index) => {
+        const angle = (index / coreCount) * twoPi;
+        node.x = Math.cos(angle) * coreRadius;
+        node.y = Math.sin(angle) * coreRadius;
+        node.vx = 0;
+        node.vy = 0;
+      });
+
+      const coreAssignments = new Map(coreNodes.map((node) => [node.id, []]));
+      const fallbackAssignments = [];
+      nonCoreNodes.forEach((node) => {
+        const connectedCore = graphEdges.find((edge) => {
+          if (edge.source === node.id && coreAssignments.has(edge.target)) {
+            return true;
+          }
+          if (edge.target === node.id && coreAssignments.has(edge.source)) {
+            return true;
+          }
+          return false;
+        });
+        if (connectedCore) {
+          const coreId =
+            connectedCore.source === node.id ? connectedCore.target : connectedCore.source;
+          coreAssignments.get(coreId).push(node);
+        } else {
+          fallbackAssignments.push(node);
+        }
+      });
+
+      coreAssignments.forEach((group, coreId) => {
+        const coreNode = coreNodes.find((node) => node.id === coreId);
+        if (!coreNode || group.length === 0) return;
+        group.forEach((node, index) => {
+          const angle = (index / group.length) * twoPi;
+          const ring = Math.floor(index / 8);
+          const distance = 90 + ring * 35;
+          node.x = coreNode.x + Math.cos(angle) * distance;
+          node.y = coreNode.y + Math.sin(angle) * distance;
+          node.vx = 0;
+          node.vy = 0;
+        });
+      });
+
+      if (fallbackAssignments.length > 0) {
+        const fallbackRadius = coreRadius + 260;
+        fallbackAssignments.forEach((node, index) => {
+          const angle = (index / fallbackAssignments.length) * twoPi;
+          node.x = Math.cos(angle) * fallbackRadius;
+          node.y = Math.sin(angle) * fallbackRadius;
+          node.vx = 0;
+          node.vy = 0;
+        });
+      }
     }
 
     function renderGraph() {
@@ -424,8 +538,11 @@ Edge Hub,BLD-06,BLD-04,BLD-05`;
 
         const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
         circle.setAttribute("r", "22");
-        circle.setAttribute("fill", "#101a3c");
-        circle.setAttribute("stroke", "rgba(111, 123, 255, 0.9)");
+        circle.setAttribute("fill", node.isCore ? "#12254f" : "#101a3c");
+        circle.setAttribute(
+          "stroke",
+          node.isCore ? "rgba(51, 212, 255, 0.95)" : "rgba(111, 123, 255, 0.9)"
+        );
         circle.setAttribute("stroke-width", "2");
 
         const idText = document.createElementNS("http://www.w3.org/2000/svg", "text");
@@ -433,7 +550,7 @@ Edge Hub,BLD-06,BLD-04,BLD-05`;
         idText.setAttribute("dominant-baseline", "middle");
         idText.setAttribute("fill", "#f2f5ff");
         idText.setAttribute("font-size", "10");
-        idText.setAttribute("font-weight", "600");
+        idText.setAttribute("font-weight", node.isCore ? "700" : "600");
         idText.textContent = node.id;
 
         const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
@@ -441,7 +558,7 @@ Edge Hub,BLD-06,BLD-04,BLD-05`;
         label.setAttribute("y", "34");
         label.setAttribute("fill", "rgba(226, 230, 255, 0.8)");
         label.setAttribute("font-size", "9");
-        label.textContent = node.name;
+        label.textContent = node.name + (node.isCore ? " (core)" : "");
 
         group.appendChild(glow);
         group.appendChild(circle);
@@ -619,7 +736,10 @@ Edge Hub,BLD-06,BLD-04,BLD-05`;
 
     function initialize() {
       csvText.value = DEFAULT_CSV;
-      setTableRows(parseCsv(DEFAULT_CSV));
+      const parsed = parseCsv(DEFAULT_CSV);
+      updateEdgeColumnsFromRows(parsed);
+      renderTableHeader();
+      setTableRows(parsed);
       attachPanZoom();
       renderTopology();
     }
@@ -636,10 +756,18 @@ Edge Hub,BLD-06,BLD-04,BLD-05`;
 
     loadCsvBtn.addEventListener("click", () => {
       const rows = parseCsv(csvText.value);
+      updateEdgeColumnsFromRows(rows);
+      renderTableHeader();
       setTableRows(rows);
     });
 
     addRowBtn.addEventListener("click", () => addTableRow());
+    addEdgeBtn.addEventListener("click", () => {
+      const nextIndex = edgeColumns.length + 1;
+      edgeColumns.push(`edge${nextIndex}`);
+      renderTableHeader();
+      setTableRows(rowsFromTable());
+    });
     renderBtn.addEventListener("click", renderTopology);
 
     releaseBtn.addEventListener("click", () => {
@@ -655,7 +783,10 @@ Edge Hub,BLD-06,BLD-04,BLD-05`;
       const reader = new FileReader();
       reader.onload = (e) => {
         csvText.value = e.target.result;
-        setTableRows(parseCsv(csvText.value));
+        const rows = parseCsv(csvText.value);
+        updateEdgeColumnsFromRows(rows);
+        renderTableHeader();
+        setTableRows(rows);
       };
       reader.readAsText(file);
     });
