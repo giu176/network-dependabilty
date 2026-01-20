@@ -252,6 +252,59 @@
       opacity: 0.7;
     }
 
+    .topology-controls {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      padding: 12px;
+      border-radius: 16px;
+      background: rgba(6, 10, 26, 0.78);
+      border: 1px solid rgba(125, 146, 255, 0.25);
+      backdrop-filter: blur(6px);
+      z-index: 2;
+      max-width: min(90vw, 720px);
+    }
+
+    .topology-controls .control-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .topology-controls button {
+      width: auto;
+      margin-top: 0;
+      padding: 8px 14px;
+      font-size: 0.8rem;
+    }
+
+    .topology-controls .inline-toggle {
+      margin-top: 0;
+      font-size: 0.8rem;
+    }
+
+    .range-control {
+      display: grid;
+      gap: 4px;
+      font-size: 0.75rem;
+      color: rgba(226, 230, 255, 0.7);
+      min-width: 170px;
+    }
+
+    .range-control input[type="range"] {
+      width: 100%;
+    }
+
+    .range-output {
+      font-variant-numeric: tabular-nums;
+      color: rgba(226, 230, 255, 0.9);
+    }
+
     #graph {
       width: 100%;
       height: 100%;
@@ -313,10 +366,6 @@
         <h2>Background</h2>
         <label for="background-file">Import background (PNG/JPG)</label>
         <input id="background-file" type="file" accept=".png,.jpg,.jpeg,image/png,image/jpeg" />
-        <label class="inline-toggle">
-          <input id="background-toggle" type="checkbox" />
-          Show background layer
-        </label>
 
         <div class="legend">
           <div><strong>Columns:</strong> Building name, BuildingID, isCore, edge1, edge2, edge3...</div>
@@ -352,10 +401,6 @@
         </div>
         <button id="add-row" class="secondary">Add row</button>
         <button id="add-edge" class="secondary">Add edge column</button>
-        <button id="render">Render topology</button>
-        <button id="release" class="secondary">Release node locks</button>
-        <button id="export-svg" class="secondary">Export SVG</button>
-        <button id="export-dxf" class="secondary">Export DXF (AutoCAD)</button>
 
         <p class="hint">
           Tip: click &amp; drag nodes to lock them in place. Drag the background to pan, scroll to
@@ -366,6 +411,24 @@
 
     <section class="page page-topology" id="page-topology" role="tabpanel" aria-labelledby="tab-topology">
       <section class="workspace">
+        <div class="topology-controls" aria-label="Topology actions">
+          <div class="control-group">
+            <button id="render">Render topology</button>
+            <button id="release" class="secondary">Release node locks</button>
+            <button id="export-svg" class="secondary">Export SVG</button>
+            <button id="export-dxf" class="secondary">Export DXF</button>
+          </div>
+          <div class="control-group">
+            <label class="inline-toggle">
+              <input id="background-toggle" type="checkbox" />
+              Show background layer
+            </label>
+            <label class="range-control" for="background-scale">
+              Background scale <span class="range-output" id="background-scale-output">100%</span>
+              <input id="background-scale" type="range" min="0.5" max="2" step="0.05" value="1" />
+            </label>
+          </div>
+        </div>
         <svg id="graph" viewBox="-500 -400 1000 800" preserveAspectRatio="xMidYMid meet"></svg>
       </section>
     </section>
@@ -393,6 +456,8 @@ Satellite,BLD-07,0,BLD-06,,`;
     const fileInput = document.getElementById("csv-file");
     const backgroundFileInput = document.getElementById("background-file");
     const backgroundToggle = document.getElementById("background-toggle");
+    const backgroundScaleInput = document.getElementById("background-scale");
+    const backgroundScaleOutput = document.getElementById("background-scale-output");
     const settingsTabButton = document.getElementById("tab-settings");
     const topologyTabButton = document.getElementById("tab-topology");
     const settingsPage = document.getElementById("page-settings");
@@ -412,6 +477,7 @@ Satellite,BLD-07,0,BLD-06,,`;
     let edgeColumns = ["edge1", "edge2", "edge3"];
     let backgroundImageHref = "";
     let isBackgroundVisible = false;
+    let backgroundScale = 1;
     const DEFAULT_EDGE_COLOR = "rgba(103, 122, 255, 0.45)";
     const DEFAULT_CORE_EDGE_COLOR = "rgba(247, 201, 72, 0.85)";
     const DEFAULT_CORE_EDGE_COLOR_HEX = "#f7c948";
@@ -541,6 +607,8 @@ Satellite,BLD-07,0,BLD-06,,`;
       const target = nodeById.get(edge.target);
       if (!source || !target) return DEFAULT_EDGE_COLOR;
       if (source.isCore && target.isCore) return coreEdgeColor;
+      if (source.isCore && coreColorMap.has(source.id)) return coreColorMap.get(source.id);
+      if (target.isCore && coreColorMap.has(target.id)) return coreColorMap.get(target.id);
 
       const sourceCore = source.isCore ? source.id : coreAssignments.get(source.id);
       const targetCore = target.isCore ? target.id : coreAssignments.get(target.id);
@@ -563,11 +631,17 @@ Satellite,BLD-07,0,BLD-06,,`;
 
       const layer =
         existing || document.createElementNS("http://www.w3.org/2000/svg", "image");
+      const baseCenterX = DEFAULT_BACKGROUND_BOUNDS.x + DEFAULT_BACKGROUND_BOUNDS.width / 2;
+      const baseCenterY = DEFAULT_BACKGROUND_BOUNDS.y + DEFAULT_BACKGROUND_BOUNDS.height / 2;
+      const scaledWidth = DEFAULT_BACKGROUND_BOUNDS.width * backgroundScale;
+      const scaledHeight = DEFAULT_BACKGROUND_BOUNDS.height * backgroundScale;
+      const scaledX = baseCenterX - scaledWidth / 2;
+      const scaledY = baseCenterY - scaledHeight / 2;
       layer.setAttribute("class", "background-layer");
-      layer.setAttribute("x", DEFAULT_BACKGROUND_BOUNDS.x);
-      layer.setAttribute("y", DEFAULT_BACKGROUND_BOUNDS.y);
-      layer.setAttribute("width", DEFAULT_BACKGROUND_BOUNDS.width);
-      layer.setAttribute("height", DEFAULT_BACKGROUND_BOUNDS.height);
+      layer.setAttribute("x", scaledX);
+      layer.setAttribute("y", scaledY);
+      layer.setAttribute("width", scaledWidth);
+      layer.setAttribute("height", scaledHeight);
       layer.setAttribute("preserveAspectRatio", "xMidYMid slice");
       layer.setAttribute("href", backgroundImageHref);
       layer.setAttribute("pointer-events", "none");
@@ -1333,6 +1407,12 @@ Satellite,BLD-07,0,BLD-06,,`;
 
     backgroundToggle.addEventListener("change", (event) => {
       isBackgroundVisible = event.target.checked;
+      syncBackgroundLayer(svg.querySelector(".viewport"));
+    });
+
+    backgroundScaleInput.addEventListener("input", () => {
+      backgroundScale = Number(backgroundScaleInput.value) || 1;
+      backgroundScaleOutput.textContent = `${Math.round(backgroundScale * 100)}%`;
       syncBackgroundLayer(svg.querySelector(".viewport"));
     });
 
