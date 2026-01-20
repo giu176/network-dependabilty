@@ -27,11 +27,10 @@
     header {
       padding: 20px 24px 10px;
       border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-      display: flex;
-      flex-wrap: wrap;
+      display: grid;
+      grid-template-columns: minmax(260px, 1fr) auto auto;
       gap: 16px;
       align-items: center;
-      justify-content: space-between;
       background: rgba(3, 6, 20, 0.8);
       backdrop-filter: blur(6px);
     }
@@ -266,7 +265,6 @@
     }
 
     .topology-controls.header-controls {
-      flex: 1 1 420px;
       justify-content: flex-end;
     }
 
@@ -332,6 +330,16 @@
         border-bottom: 1px solid rgba(255, 255, 255, 0.08);
       }
     }
+
+    @media (max-width: 1100px) {
+      header {
+        grid-template-columns: 1fr;
+      }
+
+      .topology-controls.header-controls {
+        justify-content: flex-start;
+      }
+    }
   </style>
 </head>
 <body>
@@ -339,19 +347,11 @@
     <div class="header-copy">
       <h1>Network Topology Builder</h1>
       <p>
-        Build a clear picture of your sites and connections by importing a list of locations or
-        typing them in, then drag and zoom to explore how everything links together.
+        Map your locations and connections in minutes. Add nodes from a CSV or the table below,
+        then drag, zoom, and export a clean diagram you can share.
       </p>
     </div>
-    <nav class="tabs" role="tablist" aria-label="Topology pages">
-      <button class="tab-button active" id="tab-settings" role="tab" aria-selected="true" data-tab="settings">
-        Settings
-      </button>
-      <button class="tab-button" id="tab-topology" role="tab" aria-selected="false" data-tab="topology">
-        Topology
-      </button>
-    </nav>
-    <div class="topology-controls header-controls" aria-label="Topology actions" hidden>
+    <div class="topology-controls header-controls" aria-label="Topology actions">
       <div class="control-group">
         <button id="render">Render topology</button>
         <button id="release" class="secondary">Release node locks</button>
@@ -369,6 +369,14 @@
         </label>
       </div>
     </div>
+    <nav class="tabs" role="tablist" aria-label="Topology pages">
+      <button class="tab-button active" id="tab-settings" role="tab" aria-selected="true" data-tab="settings">
+        Settings
+      </button>
+      <button class="tab-button" id="tab-topology" role="tab" aria-selected="false" data-tab="topology">
+        Topology
+      </button>
+    </nav>
   </header>
   <main>
     <section class="page page-settings active" id="page-settings" role="tabpanel" aria-labelledby="tab-settings">
@@ -462,7 +470,6 @@ Satellite,BLD-07,0,BLD-06,,`;
     const topologyTabButton = document.getElementById("tab-topology");
     const settingsPage = document.getElementById("page-settings");
     const topologyPage = document.getElementById("page-topology");
-    const topologyControls = document.querySelector(".topology-controls");
     const coreEdgeColorInput = document.getElementById("core-edge-color");
     const coreEdgeColorText = document.getElementById("core-edge-color-text");
     const coreColorPanel = document.getElementById("core-color-panel");
@@ -1561,7 +1568,6 @@ Satellite,BLD-07,0,BLD-06,,`;
       topologyTabButton.classList.toggle("active", !isSettings);
       settingsTabButton.setAttribute("aria-selected", String(isSettings));
       topologyTabButton.setAttribute("aria-selected", String(!isSettings));
-      topologyControls.hidden = isSettings;
       if (!isSettings) {
         updateViewportTransform();
       }
