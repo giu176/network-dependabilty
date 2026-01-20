@@ -1303,7 +1303,22 @@ Satellite,BLD-07,0,BLD-06,,`;
           "CONTINUOUS"
         );
       });
-      header.push("0", "ENDTAB", "0", "ENDSEC", "0", "SECTION", "2", "ENTITIES");
+      header.push(
+        "0",
+        "ENDTAB",
+        "0",
+        "ENDSEC",
+        "0",
+        "SECTION",
+        "2",
+        "BLOCKS",
+        "0",
+        "ENDSEC",
+        "0",
+        "SECTION",
+        "2",
+        "ENTITIES"
+      );
 
       function getDxfBounds(currentNodes, padding = 40) {
         if (!currentNodes.length) {
