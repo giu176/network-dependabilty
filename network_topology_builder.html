@@ -1147,6 +1147,33 @@ Satellite,BLD-07,0,BLD-06,,`;
     }
 
     function exportDxf() {
+      const content = buildDxfContent({ nodes, edges, includeLabels: true });
+      downloadFile({
+        filename: "network-topology.dxf",
+        content,
+        mime: "application/dxf",
+      });
+    }
+
+    function exportDxfSanitySample() {
+      const sampleNodes = [
+        { id: "N1", name: "Sample Node", x: 0, y: 0, isCore: false },
+        { id: "N2", name: "Sample Node 2", x: 40, y: 20, isCore: false },
+      ];
+      const sampleEdges = [{ source: "N1", target: "N2" }];
+      const content = buildDxfContent({
+        nodes: sampleNodes,
+        edges: sampleEdges,
+        includeLabels: true,
+      });
+      downloadFile({
+        filename: "network-topology-sanity.dxf",
+        content,
+        mime: "application/dxf",
+      });
+    }
+
+    function buildDxfContent({ nodes, edges, includeLabels }) {
       const header = [
         "0",
         "SECTION",
@@ -1168,7 +1195,7 @@ Satellite,BLD-07,0,BLD-06,,`;
       const textHeight = 6;
       const nodeRadius = 10;
       const labelOffset = nodeRadius + 12;
-      const bounds = getGraphBounds(0);
+      const bounds = getDxfBounds(nodes, 0);
       const mirrorX = (value) => bounds.minX + bounds.maxX - value;
       const coreColorMap = buildCoreColorMap(nodes, coreColorOverrides);
       const coreAssignments = buildCoreAssignments(nodes, edges);
@@ -1178,6 +1205,19 @@ Satellite,BLD-07,0,BLD-06,,`;
         const hex = colorToHex(value);
         if (!hex) return null;
         return parseInt(hex.slice(1), 16);
+      }
+
+      function getDxfBounds(currentNodes, padding = 40) {
+        if (!currentNodes.length) {
+          return { minX: -100, minY: -100, maxX: 100, maxY: 100 };
+        }
+        const xs = currentNodes.map((node) => node.x);
+        const ys = currentNodes.map((node) => node.y);
+        const minX = Math.min(...xs) - padding;
+        const maxX = Math.max(...xs) + padding;
+        const minY = Math.min(...ys) - padding;
+        const maxY = Math.max(...ys) + padding;
+        return { minX, minY, maxX, maxY };
       }
 
       function pushColor(color) {
@@ -1216,43 +1256,21 @@ Satellite,BLD-07,0,BLD-06,,`;
         );
       }
 
-      function addHatchCircle({ layer, x, y, radius, color }) {
+      function addCircle({ layer, x, y, radius, color }) {
         entities.push(
           "0",
-          "HATCH",
+          "CIRCLE",
           "8",
           layer,
           ...pushColor(color),
           "10",
-          "0",
-          "20",
-          "0",
-          "30",
-          "0",
-          "2",
-          "SOLID",
-          "70",
-          "1",
-          "71",
-          "0",
-          "91",
-          "1",
-          "92",
-          "2",
-          "93",
-          "1",
-          "72",
-          "2",
-          "10",
           x.toFixed(3),
           "20",
           y.toFixed(3),
+          "30",
+          "0",
           "40",
-          radius.toFixed(3),
-          "73",
-          "1",
-          "97",
-          "0"
+          radius.toFixed(3)
         );
       }
 
@@ -1287,50 +1305,41 @@ Satellite,BLD-07,0,BLD-06,,`;
         const strokeColor = node.isCore
           ? coreColorMap.get(node.id) || CORE_COLOR_PALETTE[0]
           : "rgba(111, 123, 255, 0.9)";
-        const fillColor = node.isCore ? strokeColor : "#101a3c";
         const x = mirrorX(node.x);
         const y = node.y;
 
-        addHatchCircle({ layer, x, y, radius: nodeRadius, color: fillColor });
-        entities.push(
-          "0",
-          "CIRCLE",
-          "8",
-          layer,
-          ...pushColor(strokeColor),
-          "10",
-          x.toFixed(3),
-          "20",
-          y.toFixed(3),
-          "30",
-          "0",
-          "40",
-          nodeRadius.toFixed(3)
-        );
-        addText({
-          layer,
-          x,
-          y,
-          height: textHeight,
-          text: node.id,
-          color: "#ffffff",
-        });
-        addText({
-          layer: "TOPOLOGY_LABELS",
-          x,
-          y: y + labelOffset,
-          height: textHeight - 1,
-          text: node.name,
-          color: "#1b1c24",
-        });
+        addCircle({ layer, x, y, radius: nodeRadius, color: strokeColor });
+        if (includeLabels) {
+          addText({
+            layer,
+            x,
+            y,
+            height: textHeight,
+            text: node.id,
+            color: "#ffffff",
+          });
+          addText({
+            layer: "TOPOLOGY_LABELS",
+            x,
+            y: y + labelOffset,
+            height: textHeight - 1,
+            text: node.name,
+            color: "#1b1c24",
+          });
+        }
       });
 
-      const content = [...header, ...entities, ...footer].join("\n");
-      downloadFile({
-        filename: "network-topology.dxf",
-        content,
-        mime: "application/dxf",
-      });
+      const content = [...header, ...entities, ...footer];
+      validateDxfTokens(content);
+      return content.join("\n");
+    }
+
+    function validateDxfTokens(tokens) {
+      const invalidToken = tokens.find(
+        (token) => token === "" || token === null || token === undefined
+      );
+      if (!invalidToken) return;
+      throw new Error("DXF export produced empty group code values.");
     }
 
     function enableDrag(node, element) {
