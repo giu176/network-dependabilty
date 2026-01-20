@@ -898,6 +898,8 @@ Satellite,BLD-07,0,BLD-06,,`;
         idText.setAttribute("font-weight", node.isCore ? "700" : "600");
         idText.textContent = node.id;
 
+        const labelGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
+
         const labelBackground = document.createElementNS("http://www.w3.org/2000/svg", "rect");
         labelBackground.setAttribute("fill", "#ffffff");
         labelBackground.setAttribute("fill-opacity", "0.92");
@@ -913,8 +915,9 @@ Satellite,BLD-07,0,BLD-06,,`;
         group.appendChild(glow);
         group.appendChild(circle);
         group.appendChild(idText);
-        group.appendChild(labelBackground);
-        group.appendChild(label);
+        labelGroup.appendChild(labelBackground);
+        labelGroup.appendChild(label);
+        group.appendChild(labelGroup);
         node.element = group;
         container.appendChild(group);
 
