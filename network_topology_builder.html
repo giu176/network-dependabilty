@@ -642,7 +642,7 @@ Satellite,BLD-07,0,BLD-06,,`;
       layer.setAttribute("y", scaledY);
       layer.setAttribute("width", scaledWidth);
       layer.setAttribute("height", scaledHeight);
-      layer.setAttribute("preserveAspectRatio", "xMidYMid slice");
+      layer.setAttribute("preserveAspectRatio", "xMidYMid meet");
       layer.setAttribute("href", backgroundImageHref);
       layer.setAttribute("pointer-events", "none");
 
@@ -897,7 +897,7 @@ Satellite,BLD-07,0,BLD-06,,`;
         label.setAttribute("y", "34");
         label.setAttribute("fill", "rgba(226, 230, 255, 0.8)");
         label.setAttribute("font-size", "9");
-        label.textContent = node.name + (node.isCore ? " (core)" : "");
+        label.textContent = node.name;
 
         group.appendChild(glow);
         group.appendChild(circle);
@@ -1199,7 +1199,7 @@ Satellite,BLD-07,0,BLD-06,,`;
           "40",
           (textHeight - 1).toFixed(3),
           "1",
-          node.name + (node.isCore ? " (core)" : "")
+          node.name
         );
       });
 
