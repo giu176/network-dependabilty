@@ -236,6 +236,8 @@
       <button id="add-edge" class="secondary">Add edge column</button>
       <button id="render">Render topology</button>
       <button id="release" class="secondary">Release node locks</button>
+      <button id="export-svg" class="secondary">Export SVG</button>
+      <button id="export-dxf" class="secondary">Export DXF (AutoCAD)</button>
 
       <p class="hint">
         Tip: click &amp; drag nodes to lock them in place. Drag the background to pan, scroll to
@@ -265,6 +267,8 @@ Satellite,BLD-07,0,BLD-06,,`;
     const addEdgeBtn = document.getElementById("add-edge");
     const renderBtn = document.getElementById("render");
     const releaseBtn = document.getElementById("release");
+    const exportSvgBtn = document.getElementById("export-svg");
+    const exportDxfBtn = document.getElementById("export-dxf");
     const fileInput = document.getElementById("csv-file");
     const svg = document.getElementById("graph");
 
@@ -647,6 +651,151 @@ Satellite,BLD-07,0,BLD-06,,`;
       });
     }
 
+    function getGraphBounds(padding = 40) {
+      if (!nodes.length) return { minX: -100, minY: -100, maxX: 100, maxY: 100 };
+      const xs = nodes.map((node) => node.x);
+      const ys = nodes.map((node) => node.y);
+      const minX = Math.min(...xs) - padding;
+      const maxX = Math.max(...xs) + padding;
+      const minY = Math.min(...ys) - padding;
+      const maxY = Math.max(...ys) + padding;
+      return { minX, minY, maxX, maxY };
+    }
+
+    function downloadFile({ filename, content, mime }) {
+      const blob = new Blob([content], { type: mime });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    }
+
+    function exportSvg() {
+      const clone = svg.cloneNode(true);
+      clone.removeAttribute("style");
+      const bounds = getGraphBounds(60);
+      const width = bounds.maxX - bounds.minX;
+      const height = bounds.maxY - bounds.minY;
+      clone.setAttribute("viewBox", `${bounds.minX} ${bounds.minY} ${width} ${height}`);
+      clone.setAttribute("width", width);
+      clone.setAttribute("height", height);
+      const serializer = new XMLSerializer();
+      const content = serializer.serializeToString(clone);
+      downloadFile({
+        filename: "network-topology.svg",
+        content,
+        mime: "image/svg+xml",
+      });
+    }
+
+    function exportDxf() {
+      const header = [
+        "0",
+        "SECTION",
+        "2",
+        "HEADER",
+        "9",
+        "$ACADVER",
+        "1",
+        "AC1009",
+        "0",
+        "ENDSEC",
+        "0",
+        "SECTION",
+        "2",
+        "ENTITIES",
+      ];
+      const footer = ["0", "ENDSEC", "0", "EOF"];
+      const entities = [];
+      const textHeight = 6;
+      const nodeRadius = 10;
+
+      edges.forEach((edge) => {
+        const source = nodes.find((node) => node.id === edge.source);
+        const target = nodes.find((node) => node.id === edge.target);
+        if (!source || !target) return;
+        entities.push(
+          "0",
+          "LINE",
+          "8",
+          "TOPOLOGY_EDGES",
+          "10",
+          source.x.toFixed(3),
+          "20",
+          source.y.toFixed(3),
+          "30",
+          "0",
+          "11",
+          target.x.toFixed(3),
+          "21",
+          target.y.toFixed(3),
+          "31",
+          "0"
+        );
+      });
+
+      nodes.forEach((node) => {
+        const layer = node.isCore ? "TOPOLOGY_CORE" : "TOPOLOGY_NODES";
+        entities.push(
+          "0",
+          "CIRCLE",
+          "8",
+          layer,
+          "10",
+          node.x.toFixed(3),
+          "20",
+          node.y.toFixed(3),
+          "30",
+          "0",
+          "40",
+          nodeRadius.toFixed(3)
+        );
+        entities.push(
+          "0",
+          "TEXT",
+          "8",
+          layer,
+          "10",
+          node.x.toFixed(3),
+          "20",
+          (node.y + nodeRadius + 6).toFixed(3),
+          "30",
+          "0",
+          "40",
+          textHeight.toFixed(3),
+          "1",
+          node.id
+        );
+        entities.push(
+          "0",
+          "TEXT",
+          "8",
+          "TOPOLOGY_LABELS",
+          "10",
+          node.x.toFixed(3),
+          "20",
+          (node.y - nodeRadius - 8).toFixed(3),
+          "30",
+          "0",
+          "40",
+          (textHeight - 1).toFixed(3),
+          "1",
+          node.name + (node.isCore ? " (core)" : "")
+        );
+      });
+
+      const content = [...header, ...entities, ...footer].join("\n");
+      downloadFile({
+        filename: "network-topology.dxf",
+        content,
+        mime: "application/dxf",
+      });
+    }
+
     function enableDrag(node, element) {
       let isDragging = false;
 
@@ -776,6 +925,9 @@ Satellite,BLD-07,0,BLD-06,,`;
         node.fy = null;
       });
     });
+
+    exportSvgBtn.addEventListener("click", exportSvg);
+    exportDxfBtn.addEventListener("click", exportDxf);
 
     fileInput.addEventListener("change", (event) => {
       const file = event.target.files[0];
