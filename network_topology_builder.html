@@ -915,7 +915,8 @@ Satellite,BLD-07,0,BLD-06,,`;
 
         const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
         label.setAttribute("text-anchor", "middle");
-        label.setAttribute("y", "40");
+        label.setAttribute("dominant-baseline", "hanging");
+        label.setAttribute("y", "36");
         label.setAttribute("fill", "#1b1c24");
         label.setAttribute("font-size", "9");
         label.textContent = node.name;
