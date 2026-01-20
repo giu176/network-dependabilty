@@ -96,6 +96,19 @@
       color: rgba(226, 230, 255, 0.8);
     }
 
+    .inline-toggle {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 8px;
+      font-size: 0.85rem;
+      color: rgba(226, 230, 255, 0.75);
+    }
+
+    .inline-toggle input {
+      accent-color: #6f7bff;
+    }
+
     button {
       margin-top: 12px;
       width: 100%;
@@ -156,6 +169,10 @@
         #05060a;
     }
 
+    .background-layer {
+      opacity: 0.7;
+    }
+
     #graph {
       width: 100%;
       height: 100%;
@@ -209,6 +226,14 @@
       <label for="csv-text">Paste CSV</label>
       <textarea id="csv-text"></textarea>
       <button id="load-csv">Load CSV into table</button>
+
+      <h2>Background</h2>
+      <label for="background-file">Import background (PNG/JPG)</label>
+      <input id="background-file" type="file" accept=".png,.jpg,.jpeg,image/png,image/jpeg" />
+      <label class="inline-toggle">
+        <input id="background-toggle" type="checkbox" />
+        Show background layer
+      </label>
 
       <div class="legend">
         <div><strong>Columns:</strong> Building name, BuildingID, isCore, edge1, edge2, edge3...</div>
@@ -270,6 +295,8 @@ Satellite,BLD-07,0,BLD-06,,`;
     const exportSvgBtn = document.getElementById("export-svg");
     const exportDxfBtn = document.getElementById("export-dxf");
     const fileInput = document.getElementById("csv-file");
+    const backgroundFileInput = document.getElementById("background-file");
+    const backgroundToggle = document.getElementById("background-toggle");
     const svg = document.getElementById("graph");
 
     let nodes = [];
@@ -280,6 +307,12 @@ Satellite,BLD-07,0,BLD-06,,`;
     let isPanning = false;
     let lastPanPoint = null;
     let edgeColumns = ["edge1", "edge2", "edge3"];
+    let backgroundImageHref = "";
+    let isBackgroundVisible = false;
+    const DEFAULT_EDGE_COLOR = "rgba(103, 122, 255, 0.45)";
+    const CORE_EDGE_COLOR = "rgba(247, 201, 72, 0.85)";
+    const CORE_COLOR_PALETTE = ["#33d4ff", "#6f7bff", "#f97bff", "#35f59d", "#ffd166", "#f9844a"];
+    const DEFAULT_BACKGROUND_BOUNDS = { x: -500, y: -400, width: 1000, height: 800 };
 
     function parseCsv(text) {
       const lines = text
@@ -299,6 +332,15 @@ Satellite,BLD-07,0,BLD-06,,`;
         rows.push(row);
       }
       return rows;
+    }
+
+    function hexToRgba(hex, alpha) {
+      const normalized = hex.replace("#", "");
+      if (normalized.length !== 6) return hex;
+      const red = parseInt(normalized.slice(0, 2), 16);
+      const green = parseInt(normalized.slice(2, 4), 16);
+      const blue = parseInt(normalized.slice(4, 6), 16);
+      return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
     }
 
     function splitCsvLine(line) {
@@ -324,6 +366,84 @@ Satellite,BLD-07,0,BLD-06,,`;
       }
       result.push(current);
       return result;
+    }
+
+    function buildCoreColorMap(graphNodes) {
+      const coreNodes = graphNodes.filter((node) => node.isCore);
+      return new Map(
+        coreNodes.map((node, index) => [
+          node.id,
+          CORE_COLOR_PALETTE[index % CORE_COLOR_PALETTE.length],
+        ])
+      );
+    }
+
+    function buildCoreAssignments(graphNodes, graphEdges) {
+      const coreAssignments = new Map();
+      const coreIds = new Set(graphNodes.filter((node) => node.isCore).map((node) => node.id));
+
+      graphNodes.forEach((node) => {
+        if (node.isCore) {
+          coreAssignments.set(node.id, node.id);
+        }
+      });
+
+      graphNodes.forEach((node) => {
+        if (node.isCore) return;
+        const connectedCore = graphEdges.find((edge) => {
+          if (edge.source === node.id && coreIds.has(edge.target)) return true;
+          if (edge.target === node.id && coreIds.has(edge.source)) return true;
+          return false;
+        });
+        if (connectedCore) {
+          const coreId =
+            connectedCore.source === node.id ? connectedCore.target : connectedCore.source;
+          coreAssignments.set(node.id, coreId);
+        }
+      });
+
+      return coreAssignments;
+    }
+
+    function getEdgeColor(edge, nodeById, coreColorMap, coreAssignments) {
+      const source = nodeById.get(edge.source);
+      const target = nodeById.get(edge.target);
+      if (!source || !target) return DEFAULT_EDGE_COLOR;
+      if (source.isCore && target.isCore) return CORE_EDGE_COLOR;
+
+      const sourceCore = source.isCore ? source.id : coreAssignments.get(source.id);
+      const targetCore = target.isCore ? target.id : coreAssignments.get(target.id);
+
+      if (sourceCore && targetCore && sourceCore !== targetCore) {
+        return DEFAULT_EDGE_COLOR;
+      }
+
+      const coreId = sourceCore || targetCore;
+      return coreId && coreColorMap.has(coreId) ? coreColorMap.get(coreId) : DEFAULT_EDGE_COLOR;
+    }
+
+    function syncBackgroundLayer(container) {
+      if (!container) return;
+      const existing = container.querySelector("image.background-layer");
+      if (!backgroundImageHref || !isBackgroundVisible) {
+        if (existing) existing.remove();
+        return;
+      }
+
+      const layer =
+        existing || document.createElementNS("http://www.w3.org/2000/svg", "image");
+      layer.setAttribute("class", "background-layer");
+      layer.setAttribute("x", DEFAULT_BACKGROUND_BOUNDS.x);
+      layer.setAttribute("y", DEFAULT_BACKGROUND_BOUNDS.y);
+      layer.setAttribute("width", DEFAULT_BACKGROUND_BOUNDS.width);
+      layer.setAttribute("height", DEFAULT_BACKGROUND_BOUNDS.height);
+      layer.setAttribute("preserveAspectRatio", "xMidYMid slice");
+      layer.setAttribute("href", backgroundImageHref);
+      layer.setAttribute("pointer-events", "none");
+
+      if (!existing) {
+        container.insertBefore(layer, container.firstChild);
+      }
     }
 
     function setTableRows(rows) {
@@ -523,9 +643,15 @@ Satellite,BLD-07,0,BLD-06,,`;
       container.setAttribute("class", "viewport");
       svg.appendChild(container);
 
+      const coreColorMap = buildCoreColorMap(nodes);
+      const coreAssignments = buildCoreAssignments(nodes, edges);
+      const nodeById = new Map(nodes.map((node) => [node.id, node]));
+
+      syncBackgroundLayer(container);
+
       edges.forEach((edge) => {
         const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
-        line.setAttribute("stroke", "rgba(103, 122, 255, 0.45)");
+        line.setAttribute("stroke", getEdgeColor(edge, nodeById, coreColorMap, coreAssignments));
         line.setAttribute("stroke-width", "2");
         line.setAttribute("stroke-linecap", "round");
         edge.element = line;
@@ -535,17 +661,20 @@ Satellite,BLD-07,0,BLD-06,,`;
       nodes.forEach((node) => {
         const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
         group.setAttribute("cursor", "grab");
+        const coreColor = node.isCore
+          ? coreColorMap.get(node.id) || CORE_COLOR_PALETTE[0]
+          : null;
 
         const glow = document.createElementNS("http://www.w3.org/2000/svg", "circle");
         glow.setAttribute("r", "28");
-        glow.setAttribute("fill", "rgba(51, 212, 255, 0.2)");
+        glow.setAttribute("fill", node.isCore ? hexToRgba(coreColor, 0.25) : "rgba(51, 212, 255, 0.2)");
 
         const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
         circle.setAttribute("r", "22");
         circle.setAttribute("fill", node.isCore ? "#12254f" : "#101a3c");
         circle.setAttribute(
           "stroke",
-          node.isCore ? "rgba(51, 212, 255, 0.95)" : "rgba(111, 123, 255, 0.9)"
+          node.isCore ? coreColor : "rgba(111, 123, 255, 0.9)"
         );
         circle.setAttribute("stroke-width", "2");
 
@@ -676,6 +805,7 @@ Satellite,BLD-07,0,BLD-06,,`;
 
     function exportSvg() {
       const clone = svg.cloneNode(true);
+      clone.querySelectorAll(".background-layer").forEach((layer) => layer.remove());
       clone.removeAttribute("style");
       const bounds = getGraphBounds(60);
       const width = bounds.maxX - bounds.minX;
@@ -941,6 +1071,24 @@ Satellite,BLD-07,0,BLD-06,,`;
         setTableRows(rows);
       };
       reader.readAsText(file);
+    });
+
+    backgroundFileInput.addEventListener("change", (event) => {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        backgroundImageHref = e.target.result;
+        isBackgroundVisible = true;
+        backgroundToggle.checked = true;
+        syncBackgroundLayer(svg.querySelector(".viewport"));
+      };
+      reader.readAsDataURL(file);
+    });
+
+    backgroundToggle.addEventListener("change", (event) => {
+      isBackgroundVisible = event.target.checked;
+      syncBackgroundLayer(svg.querySelector(".viewport"));
     });
 
     window.addEventListener("resize", () => {
