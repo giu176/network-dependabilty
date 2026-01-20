@@ -710,7 +710,7 @@ Satellite,BLD-07,0,BLD-06,,`;
       }
     }
 
-    function buildGraph(rows) {
+    function buildGraph(rows, previousState = new Map()) {
       const nodeMap = new Map();
       rows.forEach((row) => {
         if (
@@ -727,16 +727,17 @@ Satellite,BLD-07,0,BLD-06,,`;
           existing.name = row["Building name"] || existing.name;
           existing.isCore = existing.isCore || isCore;
         } else {
+          const savedState = previousState.get(row.BuildingID);
           nodeMap.set(row.BuildingID, {
             id: row.BuildingID,
             name: row["Building name"] || row.BuildingID,
             isCore,
-            x: (Math.random() - 0.5) * 400,
-            y: (Math.random() - 0.5) * 260,
-            vx: 0,
-            vy: 0,
-            fx: null,
-            fy: null,
+            x: savedState ? savedState.x : (Math.random() - 0.5) * 400,
+            y: savedState ? savedState.y : (Math.random() - 0.5) * 260,
+            vx: savedState ? savedState.vx : 0,
+            vy: savedState ? savedState.vy : 0,
+            fx: savedState ? savedState.fx : null,
+            fy: savedState ? savedState.fy : null,
           });
         }
       });
@@ -752,16 +753,17 @@ Satellite,BLD-07,0,BLD-06,,`;
         targets.forEach((targetId) => {
           if (!targetId) return;
           if (!nodeMap.has(targetId)) {
+            const savedState = previousState.get(targetId);
             nodeMap.set(targetId, {
               id: targetId,
               name: targetId,
               isCore: false,
-              x: (Math.random() - 0.5) * 400,
-              y: (Math.random() - 0.5) * 260,
-              vx: 0,
-              vy: 0,
-              fx: null,
-              fy: null,
+              x: savedState ? savedState.x : (Math.random() - 0.5) * 400,
+              y: savedState ? savedState.y : (Math.random() - 0.5) * 260,
+              vx: savedState ? savedState.vx : 0,
+              vy: savedState ? savedState.vy : 0,
+              fx: savedState ? savedState.fx : null,
+              fy: savedState ? savedState.fy : null,
             });
           }
           const key = [sourceId, targetId].sort().join("::");
@@ -773,11 +775,12 @@ Satellite,BLD-07,0,BLD-06,,`;
       });
 
       const graph = { nodes: Array.from(nodeMap.values()), edges: edgeList };
-      applyRadialLayout(graph.nodes, graph.edges);
+      const preservedIds = new Set(previousState.keys());
+      applyRadialLayout(graph.nodes, graph.edges, preservedIds);
       return graph;
     }
 
-    function applyRadialLayout(graphNodes, graphEdges) {
+    function applyRadialLayout(graphNodes, graphEdges, preservedIds = new Set()) {
       if (!graphNodes.length) return;
       const coreNodes = graphNodes.filter((node) => node.isCore);
       const nonCoreNodes = graphNodes.filter((node) => !node.isCore);
@@ -786,6 +789,7 @@ Satellite,BLD-07,0,BLD-06,,`;
       const twoPi = Math.PI * 2;
 
       coreNodes.forEach((node, index) => {
+        if (preservedIds.has(node.id)) return;
         const angle = (index / coreCount) * twoPi;
         node.x = Math.cos(angle) * coreRadius;
         node.y = Math.sin(angle) * coreRadius;
@@ -818,6 +822,7 @@ Satellite,BLD-07,0,BLD-06,,`;
         const coreNode = coreNodes.find((node) => node.id === coreId);
         if (!coreNode || group.length === 0) return;
         group.forEach((node, index) => {
+          if (preservedIds.has(node.id)) return;
           const angle = (index / group.length) * twoPi;
           const ring = Math.floor(index / 8);
           const distance = 90 + ring * 35;
@@ -831,6 +836,7 @@ Satellite,BLD-07,0,BLD-06,,`;
       if (fallbackAssignments.length > 0) {
         const fallbackRadius = coreRadius + 260;
         fallbackAssignments.forEach((node, index) => {
+          if (preservedIds.has(node.id)) return;
           const angle = (index / fallbackAssignments.length) * twoPi;
           node.x = Math.cos(angle) * fallbackRadius;
           node.y = Math.sin(angle) * fallbackRadius;
@@ -1003,6 +1009,22 @@ Satellite,BLD-07,0,BLD-06,,`;
         row.appendChild(textInput);
         coreColorPanel.appendChild(row);
       });
+    }
+
+    function captureNodeStateMap(graphNodes) {
+      return new Map(
+        graphNodes.map((node) => [
+          node.id,
+          {
+            x: node.x,
+            y: node.y,
+            vx: node.vx,
+            vy: node.vy,
+            fx: node.fx,
+            fy: node.fy,
+          },
+        ])
+      );
     }
 
     function tick() {
@@ -1410,7 +1432,8 @@ Satellite,BLD-07,0,BLD-06,,`;
 
     function renderTopology() {
       const rows = rowsFromTable();
-      const graph = buildGraph(rows);
+      const previousState = captureNodeStateMap(nodes);
+      const graph = buildGraph(rows, previousState);
       nodes = graph.nodes;
       edges = graph.edges;
       renderGraph();
