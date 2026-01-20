@@ -36,6 +36,10 @@
       backdrop-filter: blur(6px);
     }
 
+    header .header-copy {
+      flex: 1 1 320px;
+    }
+
     header h1 {
       font-size: 1.4rem;
       margin: 0;
@@ -49,11 +53,47 @@
       max-width: 560px;
     }
 
+    .tabs {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .tab-button {
+      border: 1px solid rgba(125, 146, 255, 0.3);
+      border-radius: 999px;
+      padding: 8px 16px;
+      background: rgba(7, 12, 28, 0.6);
+      color: rgba(226, 230, 255, 0.8);
+      font-size: 0.85rem;
+      letter-spacing: 0.04em;
+      cursor: pointer;
+      transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+    }
+
+    .tab-button.active {
+      background: linear-gradient(120deg, #6f7bff, #33d4ff);
+      color: #04040c;
+      border-color: transparent;
+    }
+
     main {
-      display: grid;
-      grid-template-columns: minmax(320px, 380px) 1fr;
-      gap: 0;
+      display: block;
       min-height: 0;
+      height: 100%;
+    }
+
+    .page {
+      display: none;
+      height: 100%;
+    }
+
+    .page.active {
+      display: block;
+    }
+
+    .page-settings {
+      overflow-y: auto;
     }
 
     .panel {
@@ -61,6 +101,12 @@
       border-right: 1px solid rgba(255, 255, 255, 0.08);
       background: linear-gradient(180deg, rgba(9, 12, 32, 0.95), rgba(5, 7, 18, 0.98));
       overflow-y: auto;
+    }
+
+    .panel.full-width {
+      border-right: none;
+      max-width: 960px;
+      margin: 0 auto;
     }
 
     .panel h2 {
@@ -161,9 +207,42 @@
       color: #f2f5ff;
     }
 
+    .color-input {
+      display: grid;
+      grid-template-columns: 56px 1fr;
+      gap: 10px;
+      align-items: center;
+      margin-top: 8px;
+    }
+
+    .color-panel {
+      display: grid;
+      gap: 10px;
+      margin-top: 8px;
+    }
+
+    .color-row {
+      display: grid;
+      grid-template-columns: minmax(140px, 1fr) 56px 1fr;
+      gap: 10px;
+      align-items: center;
+      font-size: 0.82rem;
+      color: rgba(226, 230, 255, 0.85);
+    }
+
+    .color-row input[type="text"] {
+      width: 100%;
+      border: 1px solid rgba(125, 146, 255, 0.25);
+      border-radius: 6px;
+      padding: 4px 6px;
+      background: rgba(7, 12, 28, 0.7);
+      color: #f2f5ff;
+    }
+
     .workspace {
       position: relative;
       min-height: 0;
+      height: 100%;
       background: radial-gradient(circle at 20% 20%, rgba(75, 93, 255, 0.12), transparent 55%),
         radial-gradient(circle at 80% 80%, rgba(51, 212, 255, 0.1), transparent 50%),
         #05060a;
@@ -194,11 +273,6 @@
     }
 
     @media (max-width: 980px) {
-      main {
-        grid-template-columns: 1fr;
-        grid-template-rows: auto 1fr;
-      }
-
       .panel {
         border-right: none;
         border-bottom: 1px solid rgba(255, 255, 255, 0.08);
@@ -208,7 +282,7 @@
 </head>
 <body>
   <header>
-    <div>
+    <div class="header-copy">
       <h1>Network Topology Builder</h1>
       <p>
         Upload a CSV (Building name, BuildingID, isCore, edge1, edge2, edge3, ...) or edit the
@@ -216,62 +290,84 @@
         explore an infinite workspace.
       </p>
     </div>
+    <nav class="tabs" role="tablist" aria-label="Topology pages">
+      <button class="tab-button active" id="tab-settings" role="tab" aria-selected="true" data-tab="settings">
+        Settings
+      </button>
+      <button class="tab-button" id="tab-topology" role="tab" aria-selected="false" data-tab="topology">
+        Topology
+      </button>
+    </nav>
   </header>
   <main>
-    <section class="panel">
-      <h2>Data input</h2>
-      <label for="csv-file">Import CSV</label>
-      <input id="csv-file" type="file" accept=".csv" />
+    <section class="page page-settings active" id="page-settings" role="tabpanel" aria-labelledby="tab-settings">
+      <section class="panel full-width">
+        <h2>Data input</h2>
+        <label for="csv-file">Import CSV</label>
+        <input id="csv-file" type="file" accept=".csv" />
 
-      <label for="csv-text">Paste CSV</label>
-      <textarea id="csv-text"></textarea>
-      <button id="load-csv">Load CSV into table</button>
+        <label for="csv-text">Paste CSV</label>
+        <textarea id="csv-text"></textarea>
+        <button id="load-csv">Load CSV into table</button>
 
-      <h2>Background</h2>
-      <label for="background-file">Import background (PNG/JPG)</label>
-      <input id="background-file" type="file" accept=".png,.jpg,.jpeg,image/png,image/jpeg" />
-      <label class="inline-toggle">
-        <input id="background-toggle" type="checkbox" />
-        Show background layer
-      </label>
+        <h2>Background</h2>
+        <label for="background-file">Import background (PNG/JPG)</label>
+        <input id="background-file" type="file" accept=".png,.jpg,.jpeg,image/png,image/jpeg" />
+        <label class="inline-toggle">
+          <input id="background-toggle" type="checkbox" />
+          Show background layer
+        </label>
 
-      <div class="legend">
-        <div><strong>Columns:</strong> Building name, BuildingID, isCore, edge1, edge2, edge3...</div>
-        <div>Edges are built from: current BuildingID → edge columns.</div>
-        <div><strong>isCore:</strong> 1/0 (or true/false) to mark core nodes.</div>
-      </div>
+        <div class="legend">
+          <div><strong>Columns:</strong> Building name, BuildingID, isCore, edge1, edge2, edge3...</div>
+          <div>Edges are built from: current BuildingID → edge columns.</div>
+          <div><strong>isCore:</strong> 1/0 (or true/false) to mark core nodes.</div>
+        </div>
 
-      <h2>Node table</h2>
-      <div style="overflow-x:auto;">
-        <table id="node-table">
-          <thead>
-            <tr>
-              <th>Building name</th>
-              <th>BuildingID</th>
-              <th>isCore</th>
-              <th>edge1</th>
-              <th>edge2</th>
-              <th>edge3</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </div>
-      <button id="add-row" class="secondary">Add row</button>
-      <button id="add-edge" class="secondary">Add edge column</button>
-      <button id="render">Render topology</button>
-      <button id="release" class="secondary">Release node locks</button>
-      <button id="export-svg" class="secondary">Export SVG</button>
-      <button id="export-dxf" class="secondary">Export DXF (AutoCAD)</button>
+        <h2>Colors</h2>
+        <label for="core-edge-color-text">Core-core edge color</label>
+        <div class="color-input">
+          <input id="core-edge-color" type="color" value="#f7c948" />
+          <input id="core-edge-color-text" type="text" value="rgba(247, 201, 72, 0.85)" />
+        </div>
+        <label>Core node colors</label>
+        <div id="core-color-panel" class="color-panel"></div>
+        <p class="hint">Use hex, rgb, or rgba values for custom colors.</p>
 
-      <p class="hint">
-        Tip: click &amp; drag nodes to lock them in place. Drag the background to pan, scroll to
-        zoom.
-      </p>
+        <h2>Node table</h2>
+        <div style="overflow-x:auto;">
+          <table id="node-table">
+            <thead>
+              <tr>
+                <th>Building name</th>
+                <th>BuildingID</th>
+                <th>isCore</th>
+                <th>edge1</th>
+                <th>edge2</th>
+                <th>edge3</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <button id="add-row" class="secondary">Add row</button>
+        <button id="add-edge" class="secondary">Add edge column</button>
+        <button id="render">Render topology</button>
+        <button id="release" class="secondary">Release node locks</button>
+        <button id="export-svg" class="secondary">Export SVG</button>
+        <button id="export-dxf" class="secondary">Export DXF (AutoCAD)</button>
+
+        <p class="hint">
+          Tip: click &amp; drag nodes to lock them in place. Drag the background to pan, scroll to
+          zoom.
+        </p>
+      </section>
     </section>
 
-    <section class="workspace">
-      <svg id="graph" viewBox="-500 -400 1000 800" preserveAspectRatio="xMidYMid meet"></svg>
+    <section class="page page-topology" id="page-topology" role="tabpanel" aria-labelledby="tab-topology">
+      <section class="workspace">
+        <svg id="graph" viewBox="-500 -400 1000 800" preserveAspectRatio="xMidYMid meet"></svg>
+      </section>
     </section>
   </main>
 
@@ -297,6 +393,13 @@ Satellite,BLD-07,0,BLD-06,,`;
     const fileInput = document.getElementById("csv-file");
     const backgroundFileInput = document.getElementById("background-file");
     const backgroundToggle = document.getElementById("background-toggle");
+    const settingsTabButton = document.getElementById("tab-settings");
+    const topologyTabButton = document.getElementById("tab-topology");
+    const settingsPage = document.getElementById("page-settings");
+    const topologyPage = document.getElementById("page-topology");
+    const coreEdgeColorInput = document.getElementById("core-edge-color");
+    const coreEdgeColorText = document.getElementById("core-edge-color-text");
+    const coreColorPanel = document.getElementById("core-color-panel");
     const svg = document.getElementById("graph");
 
     let nodes = [];
@@ -310,9 +413,13 @@ Satellite,BLD-07,0,BLD-06,,`;
     let backgroundImageHref = "";
     let isBackgroundVisible = false;
     const DEFAULT_EDGE_COLOR = "rgba(103, 122, 255, 0.45)";
-    const CORE_EDGE_COLOR = "rgba(247, 201, 72, 0.85)";
+    const DEFAULT_CORE_EDGE_COLOR = "rgba(247, 201, 72, 0.85)";
+    const DEFAULT_CORE_EDGE_COLOR_HEX = "#f7c948";
     const CORE_COLOR_PALETTE = ["#33d4ff", "#6f7bff", "#f97bff", "#35f59d", "#ffd166", "#f9844a"];
     const DEFAULT_BACKGROUND_BOUNDS = { x: -500, y: -400, width: 1000, height: 800 };
+    const colorParserContext = document.createElement("canvas").getContext("2d");
+    let coreColorOverrides = new Map();
+    let coreEdgeColor = DEFAULT_CORE_EDGE_COLOR;
 
     function parseCsv(text) {
       const lines = text
@@ -368,12 +475,36 @@ Satellite,BLD-07,0,BLD-06,,`;
       return result;
     }
 
-    function buildCoreColorMap(graphNodes) {
+    function normalizeColor(value, fallback) {
+      if (value && CSS.supports("color", value)) return value;
+      return fallback;
+    }
+
+    function rgbToHex(red, green, blue) {
+      return `#${[red, green, blue]
+        .map((value) => Number(value).toString(16).padStart(2, "0"))
+        .join("")}`;
+    }
+
+    function colorToHex(value) {
+      if (!value || !CSS.supports("color", value)) return "";
+      colorParserContext.fillStyle = value;
+      const computed = colorParserContext.fillStyle;
+      if (computed.startsWith("#")) return computed;
+      const match = computed.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+      if (!match) return "";
+      return rgbToHex(match[1], match[2], match[3]);
+    }
+
+    function buildCoreColorMap(graphNodes, overrides) {
       const coreNodes = graphNodes.filter((node) => node.isCore);
       return new Map(
         coreNodes.map((node, index) => [
           node.id,
-          CORE_COLOR_PALETTE[index % CORE_COLOR_PALETTE.length],
+          normalizeColor(
+            overrides.get(node.id),
+            CORE_COLOR_PALETTE[index % CORE_COLOR_PALETTE.length]
+          ),
         ])
       );
     }
@@ -409,7 +540,7 @@ Satellite,BLD-07,0,BLD-06,,`;
       const source = nodeById.get(edge.source);
       const target = nodeById.get(edge.target);
       if (!source || !target) return DEFAULT_EDGE_COLOR;
-      if (source.isCore && target.isCore) return CORE_EDGE_COLOR;
+      if (source.isCore && target.isCore) return coreEdgeColor;
 
       const sourceCore = source.isCore ? source.id : coreAssignments.get(source.id);
       const targetCore = target.isCore ? target.id : coreAssignments.get(target.id);
@@ -643,7 +774,7 @@ Satellite,BLD-07,0,BLD-06,,`;
       container.setAttribute("class", "viewport");
       svg.appendChild(container);
 
-      const coreColorMap = buildCoreColorMap(nodes);
+      const coreColorMap = buildCoreColorMap(nodes, coreColorOverrides);
       const coreAssignments = buildCoreAssignments(nodes, edges);
       const nodeById = new Map(nodes.map((node) => [node.id, node]));
 
@@ -667,7 +798,8 @@ Satellite,BLD-07,0,BLD-06,,`;
 
         const glow = document.createElementNS("http://www.w3.org/2000/svg", "circle");
         glow.setAttribute("r", "28");
-        glow.setAttribute("fill", node.isCore ? hexToRgba(coreColor, 0.25) : "rgba(51, 212, 255, 0.2)");
+        glow.setAttribute("fill", node.isCore ? coreColor : "#33d4ff");
+        glow.setAttribute("fill-opacity", node.isCore ? "0.25" : "0.2");
 
         const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
         circle.setAttribute("r", "22");
@@ -704,6 +836,85 @@ Satellite,BLD-07,0,BLD-06,,`;
       });
 
       updateViewportTransform();
+    }
+
+    function getCoreNodesFromRows(rows) {
+      const seen = new Set();
+      const coreRows = [];
+      rows.forEach((row) => {
+        if (!row.BuildingID) return;
+        if (normalizeIsCore(row.isCore)) {
+          if (!seen.has(row.BuildingID)) {
+            coreRows.push({
+              id: row.BuildingID,
+              name: row["Building name"] || row.BuildingID,
+            });
+            seen.add(row.BuildingID);
+          }
+        }
+      });
+      return coreRows;
+    }
+
+    function updateCoreColorControls(rows) {
+      const coreNodes = getCoreNodesFromRows(rows);
+      const coreIds = new Set(coreNodes.map((node) => node.id));
+      coreColorOverrides.forEach((_, id) => {
+        if (!coreIds.has(id)) coreColorOverrides.delete(id);
+      });
+
+      coreColorPanel.innerHTML = "";
+      if (coreNodes.length === 0) {
+        const empty = document.createElement("p");
+        empty.className = "hint";
+        empty.textContent = "Add core nodes in the table to configure their colors.";
+        coreColorPanel.appendChild(empty);
+        return;
+      }
+
+      coreNodes.forEach((node, index) => {
+        const row = document.createElement("div");
+        row.className = "color-row";
+
+        const label = document.createElement("span");
+        label.textContent = `${node.name} (${node.id})`;
+
+        const colorInput = document.createElement("input");
+        colorInput.type = "color";
+
+        const textInput = document.createElement("input");
+        textInput.type = "text";
+
+        const fallbackColor = CORE_COLOR_PALETTE[index % CORE_COLOR_PALETTE.length];
+        const currentColor = normalizeColor(coreColorOverrides.get(node.id), fallbackColor);
+        const hexValue = colorToHex(currentColor) || fallbackColor;
+        colorInput.value = hexValue;
+        textInput.value = coreColorOverrides.get(node.id) || fallbackColor;
+
+        colorInput.addEventListener("input", () => {
+          coreColorOverrides.set(node.id, colorInput.value);
+          textInput.value = colorInput.value;
+          renderGraph();
+        });
+
+        textInput.addEventListener("input", () => {
+          const value = textInput.value.trim();
+          if (!value) {
+            coreColorOverrides.delete(node.id);
+            textInput.value = fallbackColor;
+          } else if (CSS.supports("color", value)) {
+            coreColorOverrides.set(node.id, value);
+            const hex = colorToHex(value);
+            if (hex) colorInput.value = hex;
+          }
+          renderGraph();
+        });
+
+        row.appendChild(label);
+        row.appendChild(colorInput);
+        row.appendChild(textInput);
+        coreColorPanel.appendChild(row);
+      });
     }
 
     function tick() {
@@ -1019,6 +1230,9 @@ Satellite,BLD-07,0,BLD-06,,`;
       updateEdgeColumnsFromRows(parsed);
       renderTableHeader();
       setTableRows(parsed);
+      updateCoreColorControls(parsed);
+      coreEdgeColor = normalizeColor(coreEdgeColorText.value, DEFAULT_CORE_EDGE_COLOR);
+      coreEdgeColorInput.value = colorToHex(coreEdgeColor) || DEFAULT_CORE_EDGE_COLOR_HEX;
       attachPanZoom();
       renderTopology();
     }
@@ -1038,6 +1252,7 @@ Satellite,BLD-07,0,BLD-06,,`;
       updateEdgeColumnsFromRows(rows);
       renderTableHeader();
       setTableRows(rows);
+      updateCoreColorControls(rows);
     });
 
     addRowBtn.addEventListener("click", () => addTableRow());
@@ -1048,6 +1263,35 @@ Satellite,BLD-07,0,BLD-06,,`;
       setTableRows(rowsFromTable());
     });
     renderBtn.addEventListener("click", renderTopology);
+
+    nodeTableBody.addEventListener("input", () => {
+      updateCoreColorControls(rowsFromTable());
+    });
+
+    settingsTabButton.addEventListener("click", () => setActiveTab("settings"));
+    topologyTabButton.addEventListener("click", () => setActiveTab("topology"));
+
+    coreEdgeColorInput.addEventListener("input", () => {
+      coreEdgeColor = coreEdgeColorInput.value;
+      coreEdgeColorText.value = coreEdgeColorInput.value;
+      renderGraph();
+    });
+
+    coreEdgeColorText.addEventListener("input", () => {
+      const value = coreEdgeColorText.value.trim();
+      if (!value) {
+        coreEdgeColor = DEFAULT_CORE_EDGE_COLOR;
+        coreEdgeColorText.value = DEFAULT_CORE_EDGE_COLOR;
+        coreEdgeColorInput.value = DEFAULT_CORE_EDGE_COLOR_HEX;
+        renderGraph();
+        return;
+      }
+      if (!CSS.supports("color", value)) return;
+      coreEdgeColor = value;
+      const hex = colorToHex(value);
+      if (hex) coreEdgeColorInput.value = hex;
+      renderGraph();
+    });
 
     releaseBtn.addEventListener("click", () => {
       nodes.forEach((node) => {
@@ -1069,6 +1313,7 @@ Satellite,BLD-07,0,BLD-06,,`;
         updateEdgeColumnsFromRows(rows);
         renderTableHeader();
         setTableRows(rows);
+        updateCoreColorControls(rows);
       };
       reader.readAsText(file);
     });
@@ -1094,6 +1339,19 @@ Satellite,BLD-07,0,BLD-06,,`;
     window.addEventListener("resize", () => {
       updateViewportTransform();
     });
+
+    function setActiveTab(tabName) {
+      const isSettings = tabName === "settings";
+      settingsPage.classList.toggle("active", isSettings);
+      topologyPage.classList.toggle("active", !isSettings);
+      settingsTabButton.classList.toggle("active", isSettings);
+      topologyTabButton.classList.toggle("active", !isSettings);
+      settingsTabButton.setAttribute("aria-selected", String(isSettings));
+      topologyTabButton.setAttribute("aria-selected", String(!isSettings));
+      if (!isSettings) {
+        updateViewportTransform();
+      }
+    }
 
     initialize();
   </script>
