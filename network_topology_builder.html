@@ -356,6 +356,8 @@
         <button id="render">Render topology</button>
         <button id="release" class="secondary">Release node locks</button>
         <button id="export-svg" class="secondary">Export SVG</button>
+        <button id="export-png" class="secondary">Export PNG</button>
+        <button id="export-jpg" class="secondary">Export JPG</button>
         <button id="export-dxf" class="secondary">Export DXF</button>
       </div>
       <div class="control-group">
@@ -460,6 +462,8 @@ Satellite,BLD-07,0,BLD-06,,`;
     const renderBtn = document.getElementById("render");
     const releaseBtn = document.getElementById("release");
     const exportSvgBtn = document.getElementById("export-svg");
+    const exportPngBtn = document.getElementById("export-png");
+    const exportJpgBtn = document.getElementById("export-jpg");
     const exportDxfBtn = document.getElementById("export-dxf");
     const fileInput = document.getElementById("csv-file");
     const backgroundFileInput = document.getElementById("background-file");
@@ -1155,9 +1159,22 @@ Satellite,BLD-07,0,BLD-06,,`;
       URL.revokeObjectURL(url);
     }
 
-    function exportSvg() {
+    function downloadBlob({ filename, blob }) {
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    }
+
+    function buildExportClone({ includeBackground }) {
       const clone = svg.cloneNode(true);
-      clone.querySelectorAll(".background-layer").forEach((layer) => layer.remove());
+      if (!includeBackground) {
+        clone.querySelectorAll(".background-layer").forEach((layer) => layer.remove());
+      }
       clone.removeAttribute("style");
       const clonedViewport = clone.querySelector(".viewport");
       if (clonedViewport) clonedViewport.removeAttribute("transform");
@@ -1167,6 +1184,11 @@ Satellite,BLD-07,0,BLD-06,,`;
       clone.setAttribute("viewBox", `${bounds.minX} ${bounds.minY} ${width} ${height}`);
       clone.setAttribute("width", width);
       clone.setAttribute("height", height);
+      return { clone, width, height };
+    }
+
+    function exportSvg() {
+      const { clone } = buildExportClone({ includeBackground: isBackgroundVisible });
       const serializer = new XMLSerializer();
       const content = serializer.serializeToString(clone);
       downloadFile({
@@ -1174,6 +1196,45 @@ Satellite,BLD-07,0,BLD-06,,`;
         content,
         mime: "image/svg+xml",
       });
+    }
+
+    function exportRaster(format) {
+      const includeBackground = isBackgroundVisible;
+      const { clone, width, height } = buildExportClone({ includeBackground });
+      const serializer = new XMLSerializer();
+      const svgContent = serializer.serializeToString(clone);
+      const svgBlob = new Blob([svgContent], { type: "image/svg+xml;charset=utf-8" });
+      const url = URL.createObjectURL(svgBlob);
+      const image = new Image();
+      image.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.ceil(width);
+        canvas.height = Math.ceil(height);
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          URL.revokeObjectURL(url);
+          return;
+        }
+        if (format === "jpeg") {
+          ctx.fillStyle = "#ffffff";
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+        ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+        const mime = format === "png" ? "image/png" : "image/jpeg";
+        canvas.toBlob(
+          (blob) => {
+            if (!blob) return;
+            downloadBlob({
+              filename: `network-topology.${format === "png" ? "png" : "jpg"}`,
+              blob,
+            });
+          },
+          mime,
+          format === "jpeg" ? 0.92 : undefined,
+        );
+        URL.revokeObjectURL(url);
+      };
+      image.src = url;
     }
 
     function exportDxf() {
@@ -1671,6 +1732,8 @@ Satellite,BLD-07,0,BLD-06,,`;
     });
 
     exportSvgBtn.addEventListener("click", exportSvg);
+    exportPngBtn.addEventListener("click", () => exportRaster("png"));
+    exportJpgBtn.addEventListener("click", () => exportRaster("jpeg"));
     exportDxfBtn.addEventListener("click", exportDxf);
 
     fileInput.addEventListener("change", (event) => {
