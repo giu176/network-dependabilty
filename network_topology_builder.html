@@ -261,6 +261,127 @@
       opacity: 0.7;
     }
 
+    .layer-drawer {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      width: min(320px, 90vw);
+      max-height: calc(100% - 40px);
+      background: rgba(6, 10, 26, 0.88);
+      border: 1px solid rgba(125, 146, 255, 0.25);
+      border-radius: 16px;
+      padding: 14px;
+      display: grid;
+      gap: 12px;
+      overflow: hidden;
+      backdrop-filter: blur(6px);
+      box-shadow: 0 20px 40px rgba(6, 10, 26, 0.4);
+    }
+
+    .layer-drawer.collapsed {
+      width: 52px;
+      padding: 10px;
+      align-items: center;
+    }
+
+    .layer-drawer.collapsed .drawer-content,
+    .layer-drawer.collapsed .drawer-title {
+      display: none;
+    }
+
+    .drawer-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .drawer-title {
+      font-size: 0.9rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: rgba(226, 230, 255, 0.75);
+    }
+
+    .drawer-toggle {
+      width: auto;
+      margin-top: 0;
+      padding: 6px 10px;
+      border-radius: 10px;
+      font-size: 0.75rem;
+      background: rgba(255, 255, 255, 0.08);
+      color: #f2f5ff;
+      border: 1px solid rgba(125, 146, 255, 0.3);
+    }
+
+    .drawer-content {
+      overflow-y: auto;
+      padding-right: 4px;
+      display: grid;
+      gap: 16px;
+    }
+
+    .drawer-section h3 {
+      margin: 0 0 6px;
+      font-size: 0.85rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: rgba(226, 230, 255, 0.75);
+    }
+
+    .drawer-checkbox {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.82rem;
+      color: rgba(226, 230, 255, 0.85);
+    }
+
+    .drawer-checkbox input {
+      accent-color: #6f7bff;
+    }
+
+    .drawer-list {
+      display: grid;
+      gap: 6px;
+      padding-left: 8px;
+    }
+
+    .edge-folder {
+      border: 1px solid rgba(125, 146, 255, 0.2);
+      border-radius: 12px;
+      padding: 6px 8px;
+      background: rgba(8, 12, 28, 0.5);
+    }
+
+    .edge-folder summary {
+      list-style: none;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      gap: 8px;
+    }
+
+    .edge-folder summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .edge-folder .folder-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.82rem;
+      color: rgba(226, 230, 255, 0.85);
+      flex: 1;
+    }
+
+    .edge-folder .folder-count {
+      font-size: 0.7rem;
+      color: rgba(226, 230, 255, 0.55);
+    }
+
     .topology-controls {
       display: grid;
       gap: 6px;
@@ -474,6 +595,32 @@
 
     <section class="page page-topology" id="page-topology" role="tabpanel" aria-labelledby="tab-topology">
       <section class="workspace">
+        <aside class="layer-drawer" id="layer-drawer" aria-label="Tools drawer">
+          <div class="drawer-header">
+            <span class="drawer-title">Tools</span>
+            <button class="drawer-toggle" type="button" id="layer-drawer-toggle" aria-expanded="true">
+              Collapse
+            </button>
+          </div>
+          <div class="drawer-content">
+            <div class="drawer-section">
+              <h3>Nodes</h3>
+              <label class="drawer-checkbox">
+                <input type="checkbox" id="toggle-all-nodes" />
+                <span>All nodes</span>
+              </label>
+              <div id="node-layer-list" class="drawer-list"></div>
+            </div>
+            <div class="drawer-section">
+              <h3>Edges</h3>
+              <label class="drawer-checkbox">
+                <input type="checkbox" id="toggle-all-edges" />
+                <span>All edges</span>
+              </label>
+              <div id="edge-layer-list" class="drawer-list"></div>
+            </div>
+          </div>
+        </aside>
         <svg id="graph" viewBox="-500 -400 1000 800" preserveAspectRatio="xMidYMid meet"></svg>
       </section>
     </section>
@@ -513,6 +660,12 @@ Satellite,BLD-07,0,BLD-06,,`;
     const coreEdgeColorText = document.getElementById("core-edge-color-text");
     const coreColorPanel = document.getElementById("core-color-panel");
     const svg = document.getElementById("graph");
+    const layerDrawer = document.getElementById("layer-drawer");
+    const layerDrawerToggle = document.getElementById("layer-drawer-toggle");
+    const nodeLayerList = document.getElementById("node-layer-list");
+    const edgeLayerList = document.getElementById("edge-layer-list");
+    const toggleAllNodes = document.getElementById("toggle-all-nodes");
+    const toggleAllEdges = document.getElementById("toggle-all-edges");
 
     let nodes = [];
     let edges = [];
@@ -533,6 +686,10 @@ Satellite,BLD-07,0,BLD-06,,`;
     const colorParserContext = document.createElement("canvas").getContext("2d");
     let coreColorOverrides = new Map();
     let coreEdgeColor = DEFAULT_CORE_EDGE_COLOR;
+    const layerState = {
+      nodes: new Map(),
+      edges: new Map()
+    };
 
     function parseCsv(text) {
       const lines = text
@@ -647,6 +804,171 @@ Satellite,BLD-07,0,BLD-06,,`;
       });
 
       return coreAssignments;
+    }
+
+    function syncLayerState(graphNodes, graphEdges) {
+      const nodeIds = new Set(graphNodes.map((node) => node.id));
+      nodeIds.forEach((id) => {
+        if (!layerState.nodes.has(id)) layerState.nodes.set(id, true);
+      });
+      Array.from(layerState.nodes.keys()).forEach((id) => {
+        if (!nodeIds.has(id)) layerState.nodes.delete(id);
+      });
+
+      const edgeIds = new Set(graphEdges.map((edge) => edge.id));
+      edgeIds.forEach((id) => {
+        if (!layerState.edges.has(id)) layerState.edges.set(id, true);
+      });
+      Array.from(layerState.edges.keys()).forEach((id) => {
+        if (!edgeIds.has(id)) layerState.edges.delete(id);
+      });
+    }
+
+    function getEdgeGroupId(edge, nodeById, coreAssignments) {
+      const source = nodeById.get(edge.source);
+      const target = nodeById.get(edge.target);
+      if (source?.isCore) return source.id;
+      if (target?.isCore) return target.id;
+      const sourceCore = coreAssignments.get(edge.source);
+      const targetCore = coreAssignments.get(edge.target);
+      return sourceCore || targetCore || "unassigned";
+    }
+
+    function getEdgeGroupLabel(groupId, nodeById) {
+      if (groupId === "unassigned") return "Unassigned edges";
+      const node = nodeById.get(groupId);
+      if (!node) return groupId;
+      return `${node.name} (${node.id})`;
+    }
+
+    function applyLayerVisibility() {
+      nodes.forEach((node) => {
+        if (!node.element) return;
+        const isVisible = layerState.nodes.get(node.id) !== false;
+        node.element.setAttribute("display", isVisible ? "" : "none");
+      });
+
+      edges.forEach((edge) => {
+        if (!edge.element) return;
+        const isVisible = layerState.edges.get(edge.id) !== false;
+        edge.element.setAttribute("display", isVisible ? "" : "none");
+      });
+    }
+
+    function updateLayerDrawer() {
+      syncLayerState(nodes, edges);
+      nodeLayerList.innerHTML = "";
+      edgeLayerList.innerHTML = "";
+
+      const nodeById = new Map(nodes.map((node) => [node.id, node]));
+      const coreAssignments = buildCoreAssignments(nodes, edges);
+      const sortedNodes = [...nodes].sort((a, b) => {
+        if (a.isCore !== b.isCore) return a.isCore ? -1 : 1;
+        return a.name.localeCompare(b.name);
+      });
+
+      sortedNodes.forEach((node) => {
+        const label = document.createElement("label");
+        label.className = "drawer-checkbox";
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.checked = layerState.nodes.get(node.id) !== false;
+        checkbox.addEventListener("change", () => {
+          layerState.nodes.set(node.id, checkbox.checked);
+          applyLayerVisibility();
+          updateLayerDrawer();
+        });
+        const text = document.createElement("span");
+        text.textContent = `${node.name} (${node.id})`;
+        label.appendChild(checkbox);
+        label.appendChild(text);
+        nodeLayerList.appendChild(label);
+      });
+
+      const edgeGroups = new Map();
+      edges.forEach((edge) => {
+        const groupId = getEdgeGroupId(edge, nodeById, coreAssignments);
+        if (!edgeGroups.has(groupId)) {
+          edgeGroups.set(groupId, { id: groupId, edges: [] });
+        }
+        edgeGroups.get(groupId).edges.push(edge);
+      });
+
+      const sortedGroups = Array.from(edgeGroups.values()).sort((a, b) =>
+        getEdgeGroupLabel(a.id, nodeById).localeCompare(getEdgeGroupLabel(b.id, nodeById))
+      );
+
+      sortedGroups.forEach((group) => {
+        const details = document.createElement("details");
+        details.className = "edge-folder";
+        details.open = true;
+
+        const summary = document.createElement("summary");
+        const title = document.createElement("div");
+        title.className = "folder-title";
+        const folderCheckbox = document.createElement("input");
+        folderCheckbox.type = "checkbox";
+        const edgeIds = group.edges.map((edge) => edge.id);
+        const allSelected = edgeIds.every((id) => layerState.edges.get(id) !== false);
+        const someSelected = edgeIds.some((id) => layerState.edges.get(id) !== false);
+        folderCheckbox.checked = allSelected;
+        folderCheckbox.indeterminate = !allSelected && someSelected;
+        folderCheckbox.addEventListener("click", (event) => event.stopPropagation());
+        folderCheckbox.addEventListener("change", () => {
+          edgeIds.forEach((id) => layerState.edges.set(id, folderCheckbox.checked));
+          applyLayerVisibility();
+          updateLayerDrawer();
+        });
+        const folderLabel = document.createElement("span");
+        folderLabel.textContent = getEdgeGroupLabel(group.id, nodeById);
+        title.appendChild(folderCheckbox);
+        title.appendChild(folderLabel);
+
+        const count = document.createElement("span");
+        count.className = "folder-count";
+        count.textContent = `${group.edges.length} edges`;
+        summary.appendChild(title);
+        summary.appendChild(count);
+        details.appendChild(summary);
+
+        const list = document.createElement("div");
+        list.className = "drawer-list";
+        group.edges.forEach((edge) => {
+          const row = document.createElement("label");
+          row.className = "drawer-checkbox";
+          const checkbox = document.createElement("input");
+          checkbox.type = "checkbox";
+          checkbox.checked = layerState.edges.get(edge.id) !== false;
+          checkbox.addEventListener("change", () => {
+            layerState.edges.set(edge.id, checkbox.checked);
+            applyLayerVisibility();
+            updateLayerDrawer();
+          });
+          const sourceLabel = nodeById.get(edge.source)?.name || edge.source;
+          const targetLabel = nodeById.get(edge.target)?.name || edge.target;
+          const text = document.createElement("span");
+          text.textContent = `${sourceLabel} → ${targetLabel}`;
+          row.appendChild(checkbox);
+          row.appendChild(text);
+          list.appendChild(row);
+        });
+        details.appendChild(list);
+        edgeLayerList.appendChild(details);
+      });
+
+      const nodeIds = sortedNodes.map((node) => node.id);
+      const allNodesSelected = nodeIds.length > 0 && nodeIds.every((id) => layerState.nodes.get(id) !== false);
+      const someNodesSelected = nodeIds.some((id) => layerState.nodes.get(id) !== false);
+      toggleAllNodes.checked = allNodesSelected;
+      toggleAllNodes.indeterminate = !allNodesSelected && someNodesSelected;
+      toggleAllNodes.disabled = nodeIds.length === 0;
+
+      const edgeIds = edges.map((edge) => edge.id);
+      const allEdgesSelected = edgeIds.length > 0 && edgeIds.every((id) => layerState.edges.get(id) !== false);
+      const someEdgesSelected = edgeIds.some((id) => layerState.edges.get(id) !== false);
+      toggleAllEdges.checked = allEdgesSelected;
+      toggleAllEdges.indeterminate = !allEdgesSelected && someEdgesSelected;
+      toggleAllEdges.disabled = edgeIds.length === 0;
     }
 
     function getEdgeColor(edge, nodeById, coreColorMap, coreAssignments) {
@@ -816,7 +1138,7 @@ Satellite,BLD-07,0,BLD-06,,`;
           const key = [sourceId, targetId].sort().join("::");
           if (!edgeSet.has(key)) {
             edgeSet.add(key);
-            edgeList.push({ source: sourceId, target: targetId });
+            edgeList.push({ source: sourceId, target: targetId, id: key });
           }
         });
       });
@@ -980,6 +1302,7 @@ Satellite,BLD-07,0,BLD-06,,`;
         enableDrag(node, group);
       });
 
+      applyLayerVisibility();
       updateViewportTransform();
     }
 
@@ -1709,6 +2032,7 @@ Satellite,BLD-07,0,BLD-06,,`;
       nodes = graph.nodes;
       edges = graph.edges;
       renderGraph();
+      updateLayerDrawer();
       if (animationFrame) cancelAnimationFrame(animationFrame);
       animationFrame = requestAnimationFrame(tick);
     }
@@ -1729,6 +2053,30 @@ Satellite,BLD-07,0,BLD-06,,`;
       setTableRows(rowsFromTable());
     });
     renderBtn.addEventListener("click", renderTopology);
+
+    layerDrawerToggle.addEventListener("click", () => {
+      const isCollapsed = layerDrawer.classList.toggle("collapsed");
+      layerDrawerToggle.setAttribute("aria-expanded", String(!isCollapsed));
+      layerDrawerToggle.textContent = isCollapsed ? "Expand" : "Collapse";
+    });
+
+    toggleAllNodes.addEventListener("change", (event) => {
+      const isChecked = event.target.checked;
+      nodes.forEach((node) => {
+        layerState.nodes.set(node.id, isChecked);
+      });
+      applyLayerVisibility();
+      updateLayerDrawer();
+    });
+
+    toggleAllEdges.addEventListener("change", (event) => {
+      const isChecked = event.target.checked;
+      edges.forEach((edge) => {
+        layerState.edges.set(edge.id, isChecked);
+      });
+      applyLayerVisibility();
+      updateLayerDrawer();
+    });
 
     nodeTableBody.addEventListener("input", () => {
       updateCoreColorControls(rowsFromTable());
