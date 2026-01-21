@@ -252,8 +252,7 @@
     }
 
     .topology-controls {
-      display: flex;
-      flex-wrap: wrap;
+      display: grid;
       gap: 10px;
       align-items: center;
       padding: 12px;
@@ -265,14 +264,28 @@
     }
 
     .topology-controls.header-controls {
-      justify-content: flex-end;
+      justify-items: end;
     }
 
-    .topology-controls .control-group {
+    .topology-controls .control-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 12px;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+    }
+
+    .topology-controls .control-cluster {
       display: flex;
       flex-wrap: wrap;
       gap: 8px;
       align-items: center;
+    }
+
+    .topology-controls .background-controls {
+      width: 100%;
+      justify-content: flex-end;
     }
 
     .topology-controls button {
@@ -293,6 +306,10 @@
       font-size: 0.75rem;
       color: rgba(226, 230, 255, 0.7);
       min-width: 170px;
+    }
+
+    .topology-controls .range-control {
+      min-width: 200px;
     }
 
     .range-control input[type="range"] {
@@ -352,15 +369,19 @@
       </p>
     </div>
     <div class="topology-controls header-controls" aria-label="Topology actions">
-      <div class="control-group">
-        <button id="render">Render topology</button>
-        <button id="release" class="secondary">Release node locks</button>
-        <button id="export-svg" class="secondary">Export SVG</button>
-        <button id="export-png" class="secondary">Export PNG</button>
-        <button id="export-jpg" class="secondary">Export JPG</button>
-        <button id="export-dxf" class="secondary">Export DXF</button>
+      <div class="control-row">
+        <div class="control-cluster">
+          <button id="render">Render topology</button>
+          <button id="release" class="secondary">Release node locks</button>
+        </div>
+        <div class="control-cluster">
+          <button id="export-svg" class="secondary">Export SVG</button>
+          <button id="export-png" class="secondary">Export PNG</button>
+          <button id="export-jpg" class="secondary">Export JPG</button>
+          <button id="export-dxf" class="secondary">Export DXF</button>
+        </div>
       </div>
-      <div class="control-group">
+      <div class="control-row background-controls">
         <label class="inline-toggle">
           <input id="background-toggle" type="checkbox" />
           Show background layer
