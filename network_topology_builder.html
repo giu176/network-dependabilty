@@ -253,7 +253,7 @@
 
     .topology-controls {
       display: grid;
-      gap: 10px;
+      gap: 6px;
       align-items: center;
       padding: 12px;
       border-radius: 16px;
@@ -270,21 +270,17 @@
     .topology-controls .control-row {
       display: flex;
       flex-wrap: wrap;
-      gap: 8px 12px;
+      gap: 6px 10px;
       align-items: center;
-      justify-content: space-between;
+      justify-content: flex-end;
       width: 100%;
-    }
-
-    .topology-controls .control-cluster {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      align-items: center;
     }
 
     .topology-controls .background-controls {
+      display: flex;
       width: 100%;
+      align-items: center;
+      gap: 12px;
       justify-content: flex-end;
     }
 
@@ -309,7 +305,14 @@
     }
 
     .topology-controls .range-control {
-      min-width: 200px;
+      min-width: 170px;
+    }
+
+    .topology-controls .range-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      white-space: nowrap;
     }
 
     .range-control input[type="range"] {
@@ -370,16 +373,12 @@
     </div>
     <div class="topology-controls header-controls" aria-label="Topology actions">
       <div class="control-row">
-        <div class="control-cluster">
-          <button id="render">Render topology</button>
-          <button id="release" class="secondary">Release node locks</button>
-        </div>
-        <div class="control-cluster">
-          <button id="export-svg" class="secondary">Export SVG</button>
-          <button id="export-png" class="secondary">Export PNG</button>
-          <button id="export-jpg" class="secondary">Export JPG</button>
-          <button id="export-dxf" class="secondary">Export DXF</button>
-        </div>
+        <button id="render">Render topology</button>
+        <button id="release" class="secondary">Release node locks</button>
+        <button id="export-svg" class="secondary">Export SVG</button>
+        <button id="export-png" class="secondary">Export PNG</button>
+        <button id="export-jpg" class="secondary">Export JPG</button>
+        <button id="export-dxf" class="secondary">Export DXF</button>
       </div>
       <div class="control-row background-controls">
         <label class="inline-toggle">
@@ -387,7 +386,9 @@
           Show background layer
         </label>
         <label class="range-control" for="background-scale">
-          Background scale <span class="range-output" id="background-scale-output">100%</span>
+          <span class="range-label">
+            Background scale <span class="range-output" id="background-scale-output">100%</span>
+          </span>
           <input id="background-scale" type="range" min="0.5" max="2" step="0.05" value="1" />
         </label>
       </div>
