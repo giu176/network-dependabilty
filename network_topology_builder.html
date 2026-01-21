@@ -430,6 +430,13 @@
         <label for="background-file">Import background (PNG/JPG)</label>
         <input id="background-file" type="file" accept=".png,.jpg,.jpeg,image/png,image/jpeg" />
 
+        <h2>Save &amp; restore</h2>
+        <div class="control-row">
+          <button id="save-state" class="secondary">Save topology state</button>
+          <button id="import-state" class="secondary">Import topology state</button>
+          <input id="import-state-file" type="file" accept=".json,application/json" hidden />
+        </div>
+
         <div class="legend">
           <div><strong>Columns:</strong> Building name, BuildingID, isCore, edge1, edge2, edge3...</div>
           <div>Edges are built from: current BuildingID → edge columns.</div>
@@ -502,6 +509,9 @@ Satellite,BLD-07,0,BLD-06,,`;
     const exportDxfBtn = document.getElementById("export-dxf");
     const fileInput = document.getElementById("csv-file");
     const backgroundFileInput = document.getElementById("background-file");
+    const saveStateBtn = document.getElementById("save-state");
+    const importStateBtn = document.getElementById("import-state");
+    const importStateFileInput = document.getElementById("import-state-file");
     const backgroundToggle = document.getElementById("background-toggle");
     const backgroundScaleInput = document.getElementById("background-scale");
     const backgroundScaleOutput = document.getElementById("background-scale-output");
@@ -523,6 +533,7 @@ Satellite,BLD-07,0,BLD-06,,`;
     let lastPanPoint = null;
     let edgeColumns = ["edge1", "edge2", "edge3"];
     let backgroundImageHref = "";
+    let backgroundImageName = "";
     let isBackgroundVisible = false;
     let backgroundScale = 1;
     const DEFAULT_EDGE_COLOR = "rgba(103, 122, 255, 0.45)";
@@ -770,15 +781,20 @@ Satellite,BLD-07,0,BLD-06,,`;
           return;
         const existing = nodeMap.get(row.BuildingID);
         const isCore = normalizeIsCore(row.isCore);
+        const rowLayer = row.Layer ?? row.layer ?? row["Layer"] ?? row["layer"] ?? null;
         if (existing) {
           existing.name = row["Building name"] || existing.name;
           existing.isCore = existing.isCore || isCore;
+          if (rowLayer !== null && rowLayer !== undefined && rowLayer !== "") {
+            existing.layer = rowLayer;
+          }
         } else {
           const savedState = previousState.get(row.BuildingID);
           nodeMap.set(row.BuildingID, {
             id: row.BuildingID,
             name: row["Building name"] || row.BuildingID,
             isCore,
+            layer: savedState ? savedState.layer ?? rowLayer : rowLayer,
             x: savedState ? savedState.x : (Math.random() - 0.5) * 400,
             y: savedState ? savedState.y : (Math.random() - 0.5) * 260,
             vx: savedState ? savedState.vx : 0,
@@ -805,6 +821,7 @@ Satellite,BLD-07,0,BLD-06,,`;
               id: targetId,
               name: targetId,
               isCore: false,
+              layer: savedState ? savedState.layer ?? null : null,
               x: savedState ? savedState.x : (Math.random() - 0.5) * 400,
               y: savedState ? savedState.y : (Math.random() - 0.5) * 260,
               vx: savedState ? savedState.vx : 0,
@@ -1067,6 +1084,7 @@ Satellite,BLD-07,0,BLD-06,,`;
         graphNodes.map((node) => [
           node.id,
           {
+            layer: node.layer ?? null,
             x: node.x,
             y: node.y,
             vx: node.vx,
@@ -1076,6 +1094,102 @@ Satellite,BLD-07,0,BLD-06,,`;
           },
         ])
       );
+    }
+
+    function buildStatePayload() {
+      const rows = rowsFromTable();
+      const nodeState = Object.fromEntries(
+        Array.from(captureNodeStateMap(nodes).entries()).map(([id, state]) => [
+          id,
+          {
+            layer: state.layer ?? null,
+            x: state.x,
+            y: state.y,
+            vx: state.vx,
+            vy: state.vy,
+            fx: state.fx,
+            fy: state.fy,
+          },
+        ])
+      );
+      return {
+        version: 1,
+        rows,
+        edgeColumns: [...edgeColumns],
+        coreEdgeColor,
+        coreColorOverrides: Object.fromEntries(coreColorOverrides.entries()),
+        nodeState,
+        background: {
+          imageHref: backgroundImageHref,
+          imageName: backgroundImageName,
+          scale: backgroundScale,
+          isVisible: isBackgroundVisible,
+        },
+        viewport: {
+          pan: { ...pan },
+          zoom,
+        },
+      };
+    }
+
+    function applyStatePayload(payload) {
+      if (!payload || typeof payload !== "object") return;
+      const rows = Array.isArray(payload.rows) ? payload.rows : [];
+      if (Array.isArray(payload.edgeColumns) && payload.edgeColumns.length > 0) {
+        edgeColumns = payload.edgeColumns;
+      } else {
+        updateEdgeColumnsFromRows(rows);
+      }
+      renderTableHeader();
+      setTableRows(rows);
+      updateCoreColorControls(rows);
+
+      coreEdgeColor = normalizeColor(payload.coreEdgeColor, DEFAULT_CORE_EDGE_COLOR);
+      coreEdgeColorInput.value = colorToHex(coreEdgeColor) || DEFAULT_CORE_EDGE_COLOR_HEX;
+      coreEdgeColorText.value = coreEdgeColor;
+
+      coreColorOverrides = new Map(
+        Object.entries(payload.coreColorOverrides || {}).map(([id, value]) => [id, value])
+      );
+      updateCoreColorControls(rows);
+
+      backgroundImageHref = payload.background?.imageHref || "";
+      backgroundImageName = payload.background?.imageName || "";
+      backgroundScale = Number(payload.background?.scale) || 1;
+      isBackgroundVisible = Boolean(payload.background?.isVisible);
+      backgroundToggle.checked = isBackgroundVisible;
+      backgroundScaleInput.value = String(backgroundScale);
+      backgroundScaleOutput.textContent = `${Math.round(backgroundScale * 100)}%`;
+
+      const savedPan = payload.viewport?.pan;
+      pan = {
+        x: Number(savedPan?.x) || 0,
+        y: Number(savedPan?.y) || 0,
+      };
+      zoom = Number(payload.viewport?.zoom) || 1;
+
+      const nodeStateEntries = Object.entries(payload.nodeState || {}).map(
+        ([id, state]) => [
+          id,
+          {
+            layer: state.layer ?? null,
+            x: Number(state.x) || 0,
+            y: Number(state.y) || 0,
+            vx: Number(state.vx) || 0,
+            vy: Number(state.vy) || 0,
+            fx: state.fx ?? null,
+            fy: state.fy ?? null,
+          },
+        ]
+      );
+      const nodeState = new Map(nodeStateEntries);
+      const graph = buildGraph(rows, nodeState);
+      nodes = graph.nodes;
+      edges = graph.edges;
+      renderGraph();
+      updateViewportTransform();
+      if (animationFrame) cancelAnimationFrame(animationFrame);
+      animationFrame = requestAnimationFrame(tick);
     }
 
     function tick() {
@@ -1792,11 +1906,49 @@ Satellite,BLD-07,0,BLD-06,,`;
       const reader = new FileReader();
       reader.onload = (e) => {
         backgroundImageHref = e.target.result;
+        backgroundImageName = file.name || "";
         isBackgroundVisible = true;
         backgroundToggle.checked = true;
         syncBackgroundLayer(svg.querySelector(".viewport"));
       };
       reader.readAsDataURL(file);
+    });
+
+    saveStateBtn.addEventListener("click", () => {
+      const payload = buildStatePayload();
+      const blob = new Blob([JSON.stringify(payload, null, 2)], {
+        type: "application/json",
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+      link.href = url;
+      link.download = `network-topology-state-${timestamp}.json`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    });
+
+    importStateBtn.addEventListener("click", () => {
+      importStateFileInput.value = "";
+      importStateFileInput.click();
+    });
+
+    importStateFileInput.addEventListener("change", (event) => {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const payload = JSON.parse(e.target.result);
+          applyStatePayload(payload);
+        } catch (error) {
+          console.error("Unable to import topology state.", error);
+          alert("Unable to import topology state. Please verify the file is valid JSON.");
+        }
+      };
+      reader.readAsText(file);
     });
 
     backgroundToggle.addEventListener("change", (event) => {
