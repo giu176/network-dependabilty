@@ -58,6 +58,16 @@
       flex-wrap: wrap;
     }
 
+    .tab-stack {
+      display: grid;
+      gap: 10px;
+      justify-items: end;
+    }
+
+    .tab-stack #render {
+      justify-self: end;
+    }
+
     .tab-button {
       border: 1px solid rgba(125, 146, 255, 0.3);
       border-radius: 999px;
@@ -374,7 +384,6 @@
     </div>
     <div class="topology-controls header-controls" aria-label="Topology actions">
       <div class="control-row">
-        <button id="render">Render topology</button>
         <button id="release" class="secondary">Release node locks</button>
         <button id="export-svg" class="secondary">Export SVG</button>
         <button id="export-png" class="secondary">Export PNG</button>
@@ -394,14 +403,17 @@
         </label>
       </div>
     </div>
-    <nav class="tabs" role="tablist" aria-label="Topology pages">
-      <button class="tab-button active" id="tab-settings" role="tab" aria-selected="true" data-tab="settings">
-        Settings
-      </button>
-      <button class="tab-button" id="tab-topology" role="tab" aria-selected="false" data-tab="topology">
-        Topology
-      </button>
-    </nav>
+    <div class="tab-stack">
+      <nav class="tabs" role="tablist" aria-label="Topology pages">
+        <button class="tab-button active" id="tab-settings" role="tab" aria-selected="true" data-tab="settings">
+          Settings
+        </button>
+        <button class="tab-button" id="tab-topology" role="tab" aria-selected="false" data-tab="topology">
+          Topology
+        </button>
+      </nav>
+      <button id="render">Render topology</button>
+    </div>
   </header>
   <main>
     <section class="page page-settings active" id="page-settings" role="tabpanel" aria-labelledby="tab-settings">
