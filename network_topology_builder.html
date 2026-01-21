@@ -1124,6 +1124,25 @@ Satellite,BLD-07,0,BLD-06,,`;
       return { minX, minY, maxX, maxY };
     }
 
+    function getViewportBounds(padding = 40) {
+      const viewport = svg.querySelector(".viewport");
+      if (!viewport) return getGraphBounds(padding);
+      try {
+        const box = viewport.getBBox();
+        if (!Number.isFinite(box.width) || !Number.isFinite(box.height)) {
+          return getGraphBounds(padding);
+        }
+        return {
+          minX: box.x - padding,
+          minY: box.y - padding,
+          maxX: box.x + box.width + padding,
+          maxY: box.y + box.height + padding,
+        };
+      } catch (error) {
+        return getGraphBounds(padding);
+      }
+    }
+
     function downloadFile({ filename, content, mime }) {
       const blob = new Blob([content], { type: mime });
       const url = URL.createObjectURL(blob);
@@ -1140,7 +1159,9 @@ Satellite,BLD-07,0,BLD-06,,`;
       const clone = svg.cloneNode(true);
       clone.querySelectorAll(".background-layer").forEach((layer) => layer.remove());
       clone.removeAttribute("style");
-      const bounds = getGraphBounds(60);
+      const clonedViewport = clone.querySelector(".viewport");
+      if (clonedViewport) clonedViewport.removeAttribute("transform");
+      const bounds = getViewportBounds(60);
       const width = bounds.maxX - bounds.minX;
       const height = bounds.maxY - bounds.minY;
       clone.setAttribute("viewBox", `${bounds.minX} ${bounds.minY} ${width} ${height}`);
