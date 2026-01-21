@@ -866,7 +866,7 @@ Satellite,BLD-07,0,BLD-06,,`;
       if (groupId === "unassigned") return "Unassigned edges";
       const node = nodeById.get(groupId);
       if (!node) return groupId;
-      return `${node.name} (${node.id})`;
+      return `${node.id}`;
     }
 
     function applyLayerVisibility() {
@@ -892,7 +892,7 @@ Satellite,BLD-07,0,BLD-06,,`;
       const coreAssignments = buildCoreAssignments(nodes, edges);
       const sortedNodes = [...nodes].sort((a, b) => {
         if (a.isCore !== b.isCore) return a.isCore ? -1 : 1;
-        return a.name.localeCompare(b.name);
+        return a.id.localeCompare(b.id);
       });
 
       sortedNodes.forEach((node) => {
@@ -907,7 +907,7 @@ Satellite,BLD-07,0,BLD-06,,`;
           updateLayerDrawer();
         });
         const text = document.createElement("span");
-        text.textContent = `${node.name} (${node.id})`;
+        text.textContent = `${node.id}`;
         label.appendChild(checkbox);
         label.appendChild(text);
         nodeLayerList.appendChild(label);
@@ -972,8 +972,8 @@ Satellite,BLD-07,0,BLD-06,,`;
             applyLayerVisibility();
             updateLayerDrawer();
           });
-          const sourceLabel = nodeById.get(edge.source)?.name || edge.source;
-          const targetLabel = nodeById.get(edge.target)?.name || edge.target;
+          const sourceLabel = nodeById.get(edge.source)?.id || edge.source;
+          const targetLabel = nodeById.get(edge.target)?.id || edge.target;
           const text = document.createElement("span");
           text.textContent = `${sourceLabel} → ${targetLabel}`;
           row.appendChild(checkbox);
