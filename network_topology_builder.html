@@ -271,7 +271,8 @@
       border: 1px solid rgba(125, 146, 255, 0.25);
       border-radius: 16px;
       padding: 14px;
-      display: grid;
+      display: flex;
+      flex-direction: column;
       gap: 12px;
       overflow: hidden;
       backdrop-filter: blur(6px);
@@ -279,7 +280,7 @@
     }
 
     .layer-drawer.collapsed {
-      width: 52px;
+      width: 86px;
       padding: 10px;
       align-items: center;
     }
@@ -313,13 +314,23 @@
       background: rgba(255, 255, 255, 0.08);
       color: #f2f5ff;
       border: 1px solid rgba(125, 146, 255, 0.3);
+      white-space: nowrap;
+    }
+
+    .layer-drawer.collapsed .drawer-toggle {
+      width: 100%;
+      text-align: center;
+      font-size: 0.7rem;
     }
 
     .drawer-content {
+      flex: 1;
       overflow-y: auto;
       padding-right: 4px;
       display: grid;
       gap: 16px;
+      min-height: 0;
+      overscroll-behavior: contain;
     }
 
     .drawer-section h3 {
@@ -605,11 +616,16 @@
           <div class="drawer-content">
             <div class="drawer-section">
               <h3>Nodes</h3>
-              <label class="drawer-checkbox">
-                <input type="checkbox" id="toggle-all-nodes" />
-                <span>All nodes</span>
-              </label>
-              <div id="node-layer-list" class="drawer-list"></div>
+              <details class="edge-folder" id="node-folder" open>
+                <summary>
+                  <div class="folder-title">
+                    <input type="checkbox" id="toggle-all-nodes" />
+                    <span>All nodes</span>
+                  </div>
+                  <span class="folder-count" id="node-count">0 nodes</span>
+                </summary>
+                <div id="node-layer-list" class="drawer-list"></div>
+              </details>
             </div>
             <div class="drawer-section">
               <h3>Edges</h3>
@@ -666,6 +682,7 @@ Satellite,BLD-07,0,BLD-06,,`;
     const edgeLayerList = document.getElementById("edge-layer-list");
     const toggleAllNodes = document.getElementById("toggle-all-nodes");
     const toggleAllEdges = document.getElementById("toggle-all-edges");
+    const nodeCountLabel = document.getElementById("node-count");
 
     let nodes = [];
     let edges = [];
@@ -962,6 +979,9 @@ Satellite,BLD-07,0,BLD-06,,`;
       toggleAllNodes.checked = allNodesSelected;
       toggleAllNodes.indeterminate = !allNodesSelected && someNodesSelected;
       toggleAllNodes.disabled = nodeIds.length === 0;
+      if (nodeCountLabel) {
+        nodeCountLabel.textContent = `${nodeIds.length} ${nodeIds.length === 1 ? "node" : "nodes"}`;
+      }
 
       const edgeIds = edges.map((edge) => edge.id);
       const allEdgesSelected = edgeIds.length > 0 && edgeIds.every((id) => layerState.edges.get(id) !== false);
@@ -2058,6 +2078,10 @@ Satellite,BLD-07,0,BLD-06,,`;
       const isCollapsed = layerDrawer.classList.toggle("collapsed");
       layerDrawerToggle.setAttribute("aria-expanded", String(!isCollapsed));
       layerDrawerToggle.textContent = isCollapsed ? "Expand" : "Collapse";
+    });
+
+    toggleAllNodes.addEventListener("click", (event) => {
+      event.stopPropagation();
     });
 
     toggleAllNodes.addEventListener("change", (event) => {
